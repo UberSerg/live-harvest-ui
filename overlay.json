@@ -7,7 +7,7 @@
   "razvivator": {
     "demo": true,
     "type": "note",
-    "text": "Run capital_api on 127.0.0.1:8777 with a private harvest/ ledger.",
+    "text": "Private Capital ledger stays local. This repo ships code + synthetic snapshot.",
     "mode": "interpreted"
   }
 }

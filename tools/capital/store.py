@@ -258,20 +258,25 @@ class CapitalStore:
         bals = ledger.account_balances(accounts_all, txs)
         bals = {k: v for k, v in bals.items() if k in {a["id"] for a in accounts}}
         flows = ledger.period_flows(txs, date_from, date_to)
+        planned_flows = ledger.period_flows(txs, date_from, date_to, statuses={"planned"})
+        recurring = [r for r in self.list_kind("recurring") if not r.get("archived")]
+        recurring_month = ledger.recurring_monthly_net(recurring)
         nw = ledger.net_worth(bals, assets, liabilities, valuations)
         by_cat = ledger.expense_by_category(txs, date_from, date_to)
-        # months in range (simple)
         months = sorted({t["date"][:7] for t in txs if t.get("date") and date_from <= t["date"] <= date_to})
         if not months:
-            months = [date_from[:7], date_to[:7]]
-            months = sorted(set(months))
+            months = sorted({date_from[:7], date_to[:7]})
         series = ledger.monthly_series(txs, months)
+        planned_txs = [t for t in txs if t.get("status") == "planned"]
         return {
             "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "period": {"from": date_from, "to": date_to},
             "accounts": accounts,
             "balances": bals,
             "flows": flows,
+            "planned_flows": planned_flows,
+            "recurring": recurring,
+            "recurring_monthly": recurring_month,
             "net_worth": nw,
             "expense_by_category": by_cat,
             "monthly": series,
@@ -279,6 +284,7 @@ class CapitalStore:
             "liabilities": liabilities,
             "goals": goals,
             "transactions": sorted(txs, key=lambda x: x.get("date") or "", reverse=True),
+            "planned_transactions": sorted(planned_txs, key=lambda x: x.get("date") or ""),
             "categories": self.list_kind("category"),
-            "note": "actual-only in flows/balances; estimates flagged in net_worth",
+            "note": "actual flows/balances separate from planned + recurring templates",
         }

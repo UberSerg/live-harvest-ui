@@ -12,7 +12,7 @@
     home: ["Сегодня", "Обзор"],
     self: ["Портрет", "Личность"],
     universe: ["Исследование", "Моя вселенная"],
-    capital: ["Финансы", "Капитал"],
+    capital: ["Курс на свободу", "Капитал"],
   };
 
   const esc = (s) =>
@@ -403,6 +403,8 @@
     document.querySelectorAll(".nav-btn[data-route]").forEach((b) => {
       b.classList.toggle("is-active", b.getAttribute("data-route") === r);
     });
+    stage.classList.toggle("is-wide", r === "capital");
+    document.querySelector(".top")?.classList.toggle("is-wide", r === "capital");
     if (r === "home") renderHome();
     else if (r === "self") renderSelf();
     else if (r === "universe") renderUniverse();

@@ -26,6 +26,15 @@ class MoneyTests(unittest.TestCase):
 
 
 class LedgerTests(unittest.TestCase):
+    def test_recurring_monthly(self):
+        rec = [
+            {"type": "income", "amount_minor": 380_000_00, "cadence": "monthly", "status": "planned"},
+            {"type": "expense", "amount_minor": 26_500_00, "cadence": "monthly", "status": "planned"},
+            {"type": "expense", "amount_minor": 10_000_00, "cadence": "monthly", "status": "planned"},
+        ]
+        m = ledger.recurring_monthly_net(rec)
+        self.assertEqual(m["net_cashflow_minor"], 343_500_00)
+
     def test_transfer_not_income(self):
         accounts = [
             {"id": "a", "opening_balance_minor": 100_000},

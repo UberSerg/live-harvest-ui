@@ -41,12 +41,19 @@ def account_balances(accounts: list[dict], transactions: list[dict]) -> dict[str
     return bal
 
 
-def period_flows(transactions: list[dict], date_from: str, date_to: str) -> dict[str, int]:
-    """Sum income/expense (not transfers) in [from, to], actual only. Single-currency aggregate caller-side."""
+def period_flows(
+    transactions: list[dict],
+    date_from: str,
+    date_to: str,
+    *,
+    statuses: set[str] | None = None,
+) -> dict[str, int]:
+    """Sum income/expense (not transfers) in [from, to]. Default: actual only."""
+    allow = statuses or ACTUAL_FLOW
     income = 0
     expense = 0
     for tx in transactions:
-        if not _ok(tx):
+        if tx.get("status") == "void" or tx.get("status") not in allow:
             continue
         d = tx.get("date") or ""
         if d < date_from or d > date_to:
@@ -57,7 +64,28 @@ def period_flows(transactions: list[dict], date_from: str, date_to: str) -> dict
             income += amt
         elif t in TX_OUT:
             expense += amt
-        # transfer / principal tracked elsewhere
+    return {
+        "income_minor": income,
+        "expense_minor": expense,
+        "net_cashflow_minor": income - expense,
+    }
+
+
+def recurring_monthly_net(recurring: list[dict]) -> dict[str, int]:
+    """Active recurring templates → monthly planned net (not booked as actual)."""
+    income = 0
+    expense = 0
+    for r in recurring:
+        if r.get("archived") or r.get("status") == "void":
+            continue
+        if r.get("cadence", "monthly") != "monthly":
+            continue
+        amt = int(r.get("amount_minor") or 0)
+        t = r.get("type")
+        if t in TX_IN:
+            income += amt
+        elif t in TX_OUT:
+            expense += amt
     return {
         "income_minor": income,
         "expense_minor": expense,

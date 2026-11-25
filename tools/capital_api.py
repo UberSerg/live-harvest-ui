@@ -98,6 +98,12 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/categories":
             _json(self, 200, {"ok": True, "data": STORE.list_kind("category")})
             return
+        if u.path == "/api/recurring":
+            _json(self, 200, {"ok": True, "data": STORE.list_kind("recurring")})
+            return
+        if u.path == "/api/liabilities":
+            _json(self, 200, {"ok": True, "data": STORE.list_kind("liability")})
+            return
         _json(self, 404, {"ok": False, "error": "not found"})
 
     def do_POST(self) -> None:
@@ -223,6 +229,39 @@ class Handler(BaseHTTPRequestHandler):
                     "source": "user",
                 }
                 saved = STORE.upsert("category", data)
+                _json(self, 200, {"ok": True, "data": saved})
+                return
+            if u.path == "/api/recurring":
+                currency = body.get("currency", "RUB")
+                amount_minor = body.get("amount_minor")
+                if amount_minor is None and "amount" in body:
+                    amount_minor = to_minor(body["amount"], currency)
+                data = {
+                    "kind": "recurring",
+                    "name": body["name"],
+                    "type": body["type"],
+                    "amount_minor": int(amount_minor),
+                    "currency": currency,
+                    "cadence": body.get("cadence", "monthly"),
+                    "account_id": body.get("account_id"),
+                    "category_id": body.get("category_id"),
+                    "status": body.get("status", "planned"),
+                    "source": body.get("source", "user"),
+                    "comment": body.get("comment") or "",
+                    "harvest_link": body.get("harvest_link"),
+                    "archived": False,
+                }
+                if body.get("id"):
+                    data["id"] = body["id"]
+                if data["type"] not in {
+                    "income",
+                    "expense",
+                    "debt_interest",
+                    "debt_principal",
+                }:
+                    _json(self, 400, {"ok": False, "error": "bad recurring type"})
+                    return
+                saved = STORE.upsert("recurring", data)
                 _json(self, 200, {"ok": True, "data": saved})
                 return
             _json(self, 404, {"ok": False, "error": "not found"})

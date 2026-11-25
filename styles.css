@@ -23,7 +23,8 @@
   --mono:"IBM Plex Mono",ui-monospace,monospace;
   --rail:220px;
   --ease:cubic-bezier(.2,.7,.2,1);
-  --max:920px;
+  --max:min(1480px, 100%);
+  --rail:240px;
 }
 
 *{box-sizing:border-box}
@@ -77,10 +78,11 @@ a{color:inherit}
 .soon p{margin:10px 0 0;line-height:1.45}
 .rail-foot{margin-top:auto;font:500 11px/1.45 var(--mono);color:var(--faint)}
 
-.workspace{min-width:0;padding:36px 48px 80px}
+.workspace{min-width:0;padding:36px clamp(28px,4vw,64px) 80px}
 .top{
   display:flex;justify-content:space-between;align-items:end;gap:24px;
   max-width:var(--max);
+  width:100%;
   margin-bottom:40px;
   padding-bottom:20px;
   border-bottom:1px solid var(--line-soft);
@@ -101,8 +103,17 @@ a{color:inherit}
   border-bottom:1px solid var(--line-soft);
 }
 
-.stage{max-width:var(--max)}
+.stage{max-width:var(--max);width:100%}
+.stage.is-wide{max-width:min(1680px,100%)}
+.top.is-wide,.workspace:has(.stage.is-wide) .top{max-width:min(1680px,100%)}
 .stage:focus{outline:none}
+@media (min-width:1400px){
+  .home-split{grid-template-columns:1.1fr 1fr;gap:56px}
+  .uni-panel.is-page{grid-template-columns:minmax(0,1.15fr) minmax(280px,380px);gap:56px}
+  .cap-hero{grid-template-columns:1.45fr .9fr;gap:48px}
+  .cap-pos{gap:28px}
+  .cap-wide{gap:56px}
+}
 
 /* ——— Home: editorial ——— */
 .home{display:grid;gap:48px}
@@ -314,7 +325,7 @@ a{color:inherit}
 .timeline time{font:500 12px/1.4 var(--mono);color:var(--faint)}
 
 /* ——— Capital ——— */
-.cap{display:grid;gap:32px}
+.cap{display:grid;gap:36px;width:100%}
 .cap-toolbar{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:end}
 .cap-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .cap-period input[type=date]{
@@ -324,13 +335,45 @@ a{color:inherit}
 .cap-mode{display:grid;gap:8px;justify-items:end;font-size:13px;color:var(--muted)}
 .cap-api{font:500 11px/1 var(--mono);color:var(--faint)}
 .cap-api.ok{color:var(--life)}
-.cap-banner{margin:0;padding:12px 0;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);color:var(--muted);font-size:14px}
-.cap-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
-.cap-kpi{padding:4px 0 12px;border-bottom:1px solid var(--line-soft)}
+.cap-banner{margin:0;padding:10px 0;color:var(--faint);font:500 12px/1.4 var(--mono)}
+.cap-hero{
+  display:grid;grid-template-columns:1.35fr .85fr;gap:32px;align-items:end;
+  padding:8px 0 28px;border-bottom:1px solid var(--line-soft);
+}
+.cap-hero-kicker{margin:0 0 10px;font:500 12px/1 var(--mono);color:var(--life);letter-spacing:.08em;text-transform:uppercase}
+.cap-hero-title{margin:0;font-size:clamp(28px,3vw,40px);font-weight:600;letter-spacing:-.04em;line-height:1.1}
+.cap-hero-lead{margin:14px 0 0;color:var(--muted);font-size:17px;max-width:46ch;line-height:1.45}
+.cap-hero-stat{text-align:right}
+.cap-hero-stat .cap-num{font-size:clamp(32px,3.5vw,44px);color:var(--life)}
+.cap-hero-stat .cap-sub{margin-top:8px}
+.cap-pos{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;
+}
+.cap-kpi{padding:4px 0 14px;border-bottom:1px solid var(--line-soft)}
+.cap-kpi.is-positive .cap-num{color:var(--life)}
 .cap-num{margin:0;font-size:24px;font-weight:600;letter-spacing:-.03em}
 .cap-sub{margin:6px 0 0;font-size:12px;color:var(--faint)}
-.cap-charts{display:grid;grid-template-columns:1.2fr .8fr;gap:24px}
-.cap-chart-box{min-height:220px}
+.cap-debt{
+  border:1px solid var(--line-soft);border-radius:10px;padding:0;
+  background:rgba(255,255,255,.015);
+}
+.cap-debt > summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
+  padding:14px 16px;color:var(--muted);font-size:14px;
+}
+.cap-debt > summary::-webkit-details-marker{display:none}
+.cap-debt > summary:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+.cap-debt-ico{
+  width:28px;height:28px;border-radius:8px;flex:0 0 auto;
+  display:grid;place-items:center;
+  border:1px solid var(--line);color:var(--faint);background:var(--bg-elev);
+}
+.cap-debt-ico svg{width:16px;height:16px}
+.cap-debt-body{padding:0 16px 16px;border-top:1px solid var(--line-soft)}
+.cap-debt-body .soft-list{margin-top:10px}
+.cap-charts{display:grid;grid-template-columns:1.25fr .75fr;gap:28px}
+.cap-chart-box{min-height:240px}
+.cap-wide{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
 .cap-ops-tools{margin-bottom:10px}
 .cap-ops-tools input{
   width:100%;max-width:320px;background:var(--bg-elev);border:1px solid var(--line);
@@ -363,5 +406,6 @@ a{color:inherit}
   .top{flex-direction:column;align-items:start}
   .intro-name,.persona-name{font-size:36px}
   .focus-text{font-size:18px}
-  .cap-kpis,.cap-charts{grid-template-columns:1fr}
+  .cap-hero,.cap-pos,.cap-charts,.cap-wide{grid-template-columns:1fr}
+  .cap-hero-stat{text-align:left}
 }

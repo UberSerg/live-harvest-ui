@@ -114,77 +114,105 @@
 
     const nw = summary.net_worth || {};
     const flows = summary.flows || {};
-    const hasTx = (summary.transactions || []).some((t) => t.status === "actual");
-    banner.innerHTML = hasTx
-      ? `Данные actual · актуальность среза <strong>${esc(summary.as_of)}</strong>${
-          nw.has_estimates ? " · в капитале есть <em>оценки</em>" : ""
-        }`
-      : `Ledger пуст (actual операций нет). Известные срезы дохода/кеша/ипотеки — в карточках Harvest как датированные сообщения, не как текущий баланс. Срез API: ${esc(
-          summary.as_of
-        )}`;
+    const planned = summary.planned_flows || {};
+    const recM = summary.recurring_monthly || {};
+    const surplus = recM.net_cashflow_minor || 0;
+    const debt = nw.liabilities_minor || 0;
+    banner.innerHTML = `Срез ${esc(summary.as_of)} · план и факт разделены · строим опциональность`;
+
+    const debtIcon = `<span class="cap-debt-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9.5 12.5l1.8 1.8 3.7-3.8"/></svg></span>`;
+
+    document.getElementById("stage")?.classList.add("is-wide");
 
     body.innerHTML = `
-      <section class="cap-kpis">
-        <div class="cap-kpi">
-          <p class="section-label">Чистый капитал</p>
-          <p class="cap-num">${esc(fmt(nw.net_worth_minor))}</p>
-          <p class="cap-sub">${nw.has_estimates ? "включая оценки активов" : "по книгам счетов"}</p>
+      <section class="cap-hero">
+        <div>
+          <p class="cap-hero-kicker">Курс на независимость</p>
+          <h2 class="cap-hero-title">Каждый месяц усиливает свободу</h2>
+          <p class="cap-hero-lead">Плановый профицит после известных постоянных — топливо для капитала и выбора. Сначала сила потока, детали обязательств — по запросу.</p>
         </div>
-        <div class="cap-kpi">
-          <p class="section-label">Ликвидность</p>
-          <p class="cap-num">${esc(fmt(nw.liquid_minor))}</p>
-          <p class="cap-sub">остатки счетов (actual)</p>
-        </div>
-        <div class="cap-kpi">
-          <p class="section-label">Доход периода</p>
-          <p class="cap-num">${esc(fmt(flows.income_minor))}</p>
-        </div>
-        <div class="cap-kpi">
-          <p class="section-label">Расход периода</p>
-          <p class="cap-num">${esc(fmt(flows.expense_minor))}</p>
-        </div>
-        <div class="cap-kpi">
-          <p class="section-label">Чистый поток</p>
-          <p class="cap-num">${esc(fmt(flows.net_cashflow_minor))}</p>
-          <p class="cap-sub">без переводов</p>
-        </div>
-        <div class="cap-kpi">
-          <p class="section-label">Долг</p>
-          <p class="cap-num">${esc(fmt(nw.liabilities_minor))}</p>
+        <div class="cap-hero-stat">
+          <p class="section-label">Плановый профицит / мес</p>
+          <p class="cap-num">${esc(fmt(surplus))}</p>
+          <p class="cap-sub">регулярный план · не выписка банка</p>
         </div>
       </section>
 
+      <section class="cap-pos">
+        <div class="cap-kpi is-positive">
+          <p class="section-label">Доход в плане</p>
+          <p class="cap-num">${esc(fmt(recM.income_minor))}</p>
+          <p class="cap-sub">регулярный месяц</p>
+        </div>
+        <div class="cap-kpi">
+          <p class="section-label">База расходов в плане</p>
+          <p class="cap-num">${esc(fmt(recM.expense_minor))}</p>
+          <p class="cap-sub">ипотека + известные постоянные</p>
+        </div>
+        <div class="cap-kpi is-positive">
+          <p class="section-label">Ликвидность</p>
+          <p class="cap-num">${esc(fmt(nw.liquid_minor))}</p>
+          <p class="cap-sub">готово к работе (actual)</p>
+        </div>
+      </section>
+
+      <details class="cap-debt">
+        <summary>
+          ${debtIcon}
+          <span>Обязательства под защитой учёта · нажми, чтобы раскрыть</span>
+        </summary>
+        <div class="cap-debt-body">
+          <div class="cap-pos" style="margin-top:14px">
+            <div class="cap-kpi">
+              <p class="section-label">Остаток долга</p>
+              <p class="cap-num">${esc(fmt(debt))}</p>
+              <p class="cap-sub">estimated · не центр экрана</p>
+            </div>
+            <div class="cap-kpi">
+              <p class="section-label">Чистый капитал</p>
+              <p class="cap-num">${esc(fmt(nw.net_worth_minor))}</p>
+              <p class="cap-sub">ликвидность + оценки − долг</p>
+            </div>
+            <div class="cap-kpi">
+              <p class="section-label">Факт-поток периода</p>
+              <p class="cap-num">${esc(fmt(flows.net_cashflow_minor))}</p>
+              <p class="cap-sub">actual · отдельно от плана ${esc(fmt(planned.net_cashflow_minor))}</p>
+            </div>
+          </div>
+          <ul class="soft-list" id="capLia"></ul>
+        </div>
+      </details>
+
       <section class="cap-charts">
         <div class="cap-chart-box">
-          <p class="section-label">Доходы / расходы по месяцам</p>
+          <p class="section-label">Динамика силы · доходы / расходы</p>
           <canvas id="chartFlow" height="140"></canvas>
         </div>
         <div class="cap-chart-box">
-          <p class="section-label">Структура расходов</p>
+          <p class="section-label">Куда уходит база расходов</p>
           <canvas id="chartExp" height="140"></canvas>
         </div>
       </section>
 
-      <section class="home-split">
+      <section class="cap-wide">
+        <div>
+          <p class="section-label">Движок свободы · регулярные потоки</p>
+          <ul class="soft-list" id="capRecurring"></ul>
+        </div>
         <div>
           <p class="section-label">Счета</p>
           <ul class="soft-list" id="capAccounts"></ul>
-        </div>
-        <div>
-          <p class="section-label">Цели</p>
-          <ul class="soft-list" id="capGoals"></ul>
-          <p class="section-label" style="margin-top:18px">Связь с Harvest</p>
+          <p class="section-label" style="margin-top:18px">Опора в Harvest</p>
           <ul class="soft-list">
+            <li><span>Финансовая независимость и капитал</span><span>цель</span></li>
+            <li><span>Капитал — регулярные потоки</span><span>план</span></li>
             <li><span>Доход — текущий</span><span>карточка</span></li>
-            <li><span>Кеш — текущий</span><span>карточка</span></li>
-            <li><span>Ипотека и жильё</span><span>карточка</span></li>
-            <li><span>Капитал/AUDIT</span><span>аудит</span></li>
           </ul>
         </div>
       </section>
 
       <section>
-        <p class="section-label">Операции</p>
+        <p class="section-label">Журнал операций</p>
         <div class="cap-ops-tools">
           <input type="search" id="capSearch" placeholder="Поиск…" />
         </div>
@@ -217,12 +245,30 @@
         )
         .join("");
     }
-    const goalsUl = body.querySelector("#capGoals");
-    if (!(summary.goals || []).length) {
-      goalsUl.innerHTML = "<li><span>Цели ledger пусты — см. карточки FI</span><span></span></li>";
+    const recUl = body.querySelector("#capRecurring");
+    if (!(summary.recurring || []).length) {
+      recUl.innerHTML = "<li><span>Регулярных шаблонов нет</span><span></span></li>";
     } else {
-      goalsUl.innerHTML = summary.goals
-        .map((g) => `<li><span>${esc(g.name)}</span><span>${esc(g.status)}</span></li>`)
+      recUl.innerHTML = summary.recurring
+        .map(
+          (r) =>
+            `<li><span>${esc(r.name)} · ${esc(r.type)}</span><span>${esc(
+              fmt(r.amount_minor, r.currency || "RUB")
+            )}/${esc(r.cadence || "monthly")}</span></li>`
+        )
+        .join("");
+    }
+    const liaUl = body.querySelector("#capLia");
+    if (!(summary.liabilities || []).length) {
+      liaUl.innerHTML = "<li><span>Нет обязательств в ledger</span><span></span></li>";
+    } else {
+      liaUl.innerHTML = summary.liabilities
+        .map(
+          (l) =>
+            `<li><span>${esc(l.name)} · ${esc(l.status)}</span><span>${esc(
+              fmt(l.principal_remaining_minor, l.currency || "RUB")
+            )}</span></li>`
+        )
         .join("");
     }
 
@@ -280,6 +326,10 @@
             <option value="debt_interest">%% по долгу</option>
             <option value="debt_principal">тело долга</option>
           </select>
+          <select name="status">
+            <option value="actual">факт</option>
+            <option value="planned" selected>план</option>
+          </select>
           <input name="amount" required placeholder="Сумма 0.00" />
           <select name="account_id" required><option value="">счёт…</option>${accOpts}</select>
           <select name="counterparty_account_id"><option value="">контрагент (перевод)</option>${accOpts}</select>
@@ -287,13 +337,28 @@
           <input name="comment" placeholder="Комментарий" />
           <button type="submit">Сохранить операцию</button>
         </form>
-        <p class="cap-sub">Перевод не доход/расход. Сохранение только через локальный API → YAML в harvest/Финансы/Капитал/.</p>
+
+        <p class="section-label">Регулярный поток (ежемесячный шаблон)</p>
+        <form id="formRec" class="cap-form">
+          <input name="name" required placeholder="Название" />
+          <select name="type">
+            <option value="income">доход</option>
+            <option value="expense">расход</option>
+          </select>
+          <input name="amount" required placeholder="Сумма / мес" />
+          <select name="account_id"><option value="">счёт…</option>${accOpts}</select>
+          <select name="category_id"><option value="">категория</option>${catOpts}</select>
+          <input name="comment" placeholder="Комментарий" />
+          <button type="submit">Сохранить шаблон</button>
+        </form>
+        <p class="cap-sub">План и recurring пишутся в harvest/Финансы/Капитал/ как YAML; в факт-отчётность не попадают. Перевод ≠ доход/расход.</p>
       </section>`;
   }
 
   function bindForms(root, from, to, after) {
     const formAcc = root.querySelector("#formAcc");
     const formTx = root.querySelector("#formTx");
+    const formRec = root.querySelector("#formRec");
     if (formAcc) {
       formAcc.onsubmit = async (e) => {
         e.preventDefault();
@@ -328,7 +393,7 @@
           account_id: fd.get("account_id"),
           category_id: fd.get("category_id") || null,
           comment: fd.get("comment") || "",
-          status: "actual",
+          status: fd.get("status") || "planned",
         };
         if (type === "transfer") {
           payload.counterparty_account_id = fd.get("counterparty_account_id");
@@ -341,7 +406,36 @@
           await api("/api/transactions", { method: "POST", body: JSON.stringify(payload) });
           await after();
         } catch (err) {
-          alert("Операция: " + err.message + (err.payload?.duplicate_id ? " (дубль " + err.payload.duplicate_id + ")" : ""));
+          alert(
+            "Операция: " +
+              err.message +
+              (err.payload?.duplicate_id ? " (дубль " + err.payload.duplicate_id + ")" : "")
+          );
+        }
+      };
+    }
+    if (formRec) {
+      formRec.onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(formRec);
+        try {
+          await api("/api/recurring", {
+            method: "POST",
+            body: JSON.stringify({
+              name: fd.get("name"),
+              type: fd.get("type"),
+              amount: fd.get("amount"),
+              currency: "RUB",
+              account_id: fd.get("account_id") || null,
+              category_id: fd.get("category_id") || null,
+              comment: fd.get("comment") || "",
+              status: "planned",
+              cadence: "monthly",
+            }),
+          });
+          await after();
+        } catch (err) {
+          alert("Шаблон: " + err.message);
         }
       };
     }

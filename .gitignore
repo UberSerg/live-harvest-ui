@@ -4,8 +4,3 @@ Desktop.ini
 *.log
 .env
 *.pem
-# never publish private capital ledger
-**/Финансы/Капитал/accounts/
-**/Финансы/Капитал/transactions/
-**/Финансы/Капитал/_backups/
-**/Финансы/Капитал/_journal/
