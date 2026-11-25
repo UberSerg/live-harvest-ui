@@ -48,6 +48,24 @@ SAMPLE = """ДАТА ОПЕРАЦИИ (МСК)
 SAMPLE_MISMATCH = SAMPLE.replace("Списание 1 600,00", "Списание 1 999,00")
 
 
+class ClassifyTests(unittest.TestCase):
+    def test_salary_despite_prochee_bank_category(self):
+        from tools.capital import statement_classify
+
+        clf = statement_classify.apply_rules(
+            {
+                "bank_category": "Прочие операции",
+                "merchant": "Заработная плата",
+                "description": "Заработная плата. Операция по карте ****0001",
+                "direction": "in",
+            },
+            [],
+        )
+        self.assertEqual(clf["economic_kind"], "salary")
+        self.assertEqual(clf["classification_status"], "confirmed")
+        self.assertEqual(clf["category_name"], "Зарплата")
+
+
 class ParseTests(unittest.TestCase):
     def test_sample(self):
         r = statement_parse.parse_statement(SAMPLE)

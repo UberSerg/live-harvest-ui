@@ -43,7 +43,7 @@ MERCHANT_RULES_DEFAULT = [
 
 ECONOMIC_HINTS = [
     # (regex on desc+category, economic_kind, ledger_type, confirmed?)
-    (r"зарплат|salary|wage|начислен.*оплат.*труд", "salary", "income", True),
+    (r"зарплат|заработн|salary|wage|начислен.*оплат.*труд", "salary", "income", True),
     (r"кэшбэк|кешбэк|cashback", "cashback", "income", True),
     (r"процент.*вклад|начислен.*процент|interest", "bank_interest", "income", True),
     (r"комисси[яи]|commission|fee\b", "bank_fee", "expense", True),
@@ -125,6 +125,7 @@ def apply_rules(
         source = "bank_category"
 
     # economic classification
+    strong_hint = False
     if economic is None:
         economic = "purchase" if direction == "out" else "other_income"
         ledger_type = "expense" if direction == "out" else "income"
@@ -133,14 +134,32 @@ def apply_rules(
                 economic = ek
                 ledger_type = lt
                 confirmed = conf
+                # Explicit text/merchant signals beat generic bank bucket «Прочие операции»
+                strong_hint = ek in {
+                    "salary",
+                    "cashback",
+                    "bank_interest",
+                    "bank_fee",
+                    "mortgage",
+                    "atm_withdraw",
+                    "cash_deposit",
+                    "refund",
+                    "investment_funding",
+                    "transfer_internal",
+                }
                 break
-        # «Прочие операции» never auto salary/expense certainty
-        if "прочие" in bank_cat.lower():
+        # «Прочие операции» alone is not enough to call something salary/expense —
+        # but do NOT wipe a strong description/merchant match (e.g. «Заработная плата»).
+        if "прочие" in bank_cat.lower() and not strong_hint:
             confirmed = False
-            if economic in ("purchase", "other_income", "salary"):
+            if economic in ("purchase", "other_income"):
                 economic = "undefined"
-                # still direction-based ledger type for balance, but needs_review
                 ledger_type = "expense" if direction == "out" else "income"
+
+    if economic == "salary" and (harvest_cat is None or harvest_cat == "Требует классификации"):
+        harvest_cat = "Зарплата"
+        if source == "bank_category":
+            source = "economic_hint"
 
     if harvest_cat == "Требует классификации":
         confirmed = False
