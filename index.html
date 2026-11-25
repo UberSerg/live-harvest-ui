@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Live Harvest — Command Center</title>
+  <title>Live Harvest</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -13,41 +13,32 @@
         <div class="brand-mark" aria-hidden="true"></div>
         <div>
           <div class="brand-name">Live Harvest</div>
-          <div class="brand-sub">personal command center</div>
+          <div class="brand-sub">life os · read-only</div>
         </div>
       </div>
-      <nav class="nav">
-        <p class="nav-label">жизнь</p>
-        <button type="button" class="nav-btn is-active" data-route="home"><img src="./icons/orbit.svg" alt="" />Обзор</button>
-        <button type="button" class="nav-btn" data-route="self"><img src="./icons/user.svg" alt="" />Личность</button>
-        <button type="button" class="nav-btn is-stub" data-route="knowledge"><img src="./icons/git-branch.svg" alt="" />База знаний</button>
-        <button type="button" class="nav-btn is-stub" data-route="goals"><img src="./icons/target.svg" alt="" />Цели</button>
-        <button type="button" class="nav-btn is-stub" data-route="projects"><img src="./icons/briefcase.svg" alt="" />Проекты</button>
-        <button type="button" class="nav-btn is-stub" data-route="finance"><img src="./icons/wallet.svg" alt="" />Финансы</button>
-        <button type="button" class="nav-btn is-stub" data-route="health"><img src="./icons/heart.svg" alt="" />Здоровье</button>
-        <button type="button" class="nav-btn is-stub" data-route="plan"><img src="./icons/book-open.svg" alt="" />Планирование</button>
-        <button type="button" class="nav-btn is-stub" data-route="journal"><img src="./icons/message-circle.svg" alt="" />Дневник</button>
-        <button type="button" class="nav-btn is-stub" data-route="retro"><img src="./icons/trophy.svg" alt="" />Ретроспектива</button>
-        <p class="nav-label">модули</p>
-        <button type="button" class="nav-btn is-stub" data-route="harvester"><img src="./icons/zap.svg" alt="" />Harvester</button>
-        <button type="button" class="nav-btn is-stub" data-route="advisor"><img src="./icons/sparkles.svg" alt="" />Advisor</button>
-        <button type="button" class="nav-btn is-stub" data-route="razvivator"><img src="./icons/flame.svg" alt="" />Развиватор</button>
+      <nav class="nav" aria-label="Основные экраны">
+        <button type="button" class="nav-btn is-active" data-route="home">Обзор</button>
+        <button type="button" class="nav-btn" data-route="self">Личность</button>
+        <button type="button" class="nav-btn" data-route="universe">Моя вселенная</button>
       </nav>
-      <div class="rail-foot">SoT · harvest/<br />UI read-only · v0.3</div>
+      <details class="soon">
+        <summary>Позже</summary>
+        <p>Цели, проекты, финансы, здоровье, дневник, Harvester, Advisor — не готовы. Не маскируем заглушки под продукт.</p>
+      </details>
+      <div class="rail-foot">SoT · harvest/<br />UI · v0.4</div>
     </aside>
 
     <div class="workspace">
       <header class="top">
         <div>
-          <p class="kicker" id="kicker">Command Center</p>
+          <p class="kicker" id="kicker">Сегодня</p>
           <h1 id="pageTitle">Обзор</h1>
         </div>
-        <div class="top-chips">
-          <span class="chip accent">read-only</span>
-          <span class="chip" id="asOf">as of —</span>
+        <div class="top-meta">
+          <span id="asOf">as of —</span>
         </div>
       </header>
-      <main id="stage" class="stage"></main>
+      <main id="stage" class="stage" tabindex="-1"></main>
     </div>
   </div>
   <script src="./data.js"></script>

@@ -1,25 +1,15 @@
 (() => {
   const D = window.LH_DATA;
   const stage = document.getElementById("stage");
-  const title = document.getElementById("pageTitle");
+  const titleEl = document.getElementById("pageTitle");
   const kicker = document.getElementById("kicker");
   const asOf = document.getElementById("asOf");
   asOf.textContent = `as of ${D.meta.asOf}`;
 
   const titles = {
-    home: ["Command Center", "Обзор"],
-    self: ["Character sheet", "Личность"],
-    knowledge: ["Knowledge", "База знаний"],
-    goals: ["Goals", "Цели"],
-    projects: ["Projects", "Проекты"],
-    finance: ["Finance", "Финансы"],
-    health: ["Health", "Здоровье"],
-    plan: ["Planning", "Планирование"],
-    journal: ["Journal", "Дневник"],
-    retro: ["Retro", "Ретроспектива"],
-    harvester: ["Module", "Harvester"],
-    advisor: ["Module", "Advisor"],
-    razvivator: ["Module", "Развиватор"],
+    home: ["Сегодня", "Обзор"],
+    self: ["Портрет", "Личность"],
+    universe: ["Исследование", "Моя вселенная"],
   };
 
   const esc = (s) =>
@@ -29,211 +19,353 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
 
-  function stateBoard() {
-    const s = D.state;
-    const cell = (k, v) =>
-      `<div class="state-item"><div class="k">${k}</div><div class="empty">${v == null || v === "" ? "нет данных" : esc(v)}</div></div>`;
-    return `${cell("настроение", s.mood)}${cell("энергия", s.energy)}${cell("фокус", s.focus)}${cell("волна", s.wave)}`;
+  const epLabel = { fact: "факт", intent: "намерение", hypo: "гипотеза", open: "открытый вопрос" };
+
+  function cluster(id) {
+    return D.portrait.clusters.find((c) => c.id === id);
   }
 
-  function universeSVG(selectedId) {
-    const cx = 200, cy = 200, r = 118;
-    const nodes = D.universe
-      .map((u) => {
-        const a = ((u.angle - 90) * Math.PI) / 180;
-        const x = cx + Math.cos(a) * r;
-        const y = cy + Math.sin(a) * r;
-        const selected = u.id === selectedId ? " active" : "";
-        return `<g class="node ${u.status}${selected}" data-node="${u.id}" transform="translate(${x},${y})">
-          <circle class="leaf" r="22"></circle>
-          <text text-anchor="middle" dy="4">${esc(u.label)}</text>
-        </g>`;
-      })
-      .join("");
-    return `<svg class="universe-svg" viewBox="0 0 400 400" role="img" aria-label="Моя вселенная">
-      <circle class="orbit" cx="200" cy="200" r="78"></circle>
-      <circle class="orbit orbit-2" cx="200" cy="200" r="118"></circle>
-      <circle class="orbit" cx="200" cy="200" r="158" stroke-dasharray="2 6"></circle>
-      <g class="node" transform="translate(200,200)">
-        <circle class="core" r="36"></circle>
-        <text text-anchor="middle" dy="-2" style="font-size:13px;font-weight:600">${esc(D.profile.name)}</text>
-        <text class="sub" text-anchor="middle" dy="14">ядро</text>
-      </g>
-      ${nodes}
-    </svg>`;
+  function itemsHtml(items) {
+    return items.map((it) => `<li data-ep="${esc(it.ep)}">${esc(it.text)}</li>`).join("");
   }
 
-  function universeDetail(id) {
-    const u = D.universe.find((x) => x.id === id) || D.universe[0];
-    return `<div class="universe-detail" id="universeDetail">
-      <h3>${esc(u.label)}</h3>
-      <p>${esc(u.blurb)}</p>
-      <div class="universe-hint">Визуализация связей, не аналитический KPI. Статус: ${esc(u.status)}.</div>
-    </div>`;
+  /* ——— Universe: single SVG, stable handlers ——— */
+  function UniverseController(mapHost, detailHost, opts = {}) {
+    const page = !!opts.page;
+    let selected = opts.initialId || D.universe[0].id;
+    let bound = false;
+
+    const cx = 200;
+    const cy = 200;
+    const r = 118;
+
+    function nodePos(angle) {
+      const a = ((angle - 90) * Math.PI) / 180;
+      return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
+    }
+
+    function buildSVG() {
+      const nodes = D.universe
+        .map((u) => {
+          const { x, y } = nodePos(u.angle);
+          return `<g class="uni-node" data-node="${esc(u.id)}" data-status="${esc(u.status)}"
+            transform="translate(${x.toFixed(1)},${y.toFixed(1)})"
+            role="button" tabindex="0" aria-pressed="false"
+            aria-label="${esc(u.label)}">
+            <circle class="pulse" r="28"></circle>
+            <circle class="leaf" r="22"></circle>
+            <text class="label" text-anchor="middle" dy="4">${esc(u.label)}</text>
+          </g>`;
+        })
+        .join("");
+
+      return `<svg class="uni-svg" viewBox="0 0 400 400" role="img" aria-label="Карта жизненных областей">
+        <circle class="uni-orbit" cx="200" cy="200" r="78"></circle>
+        <circle class="uni-orbit mid" cx="200" cy="200" r="118"></circle>
+        <circle class="uni-orbit outer" cx="200" cy="200" r="158"></circle>
+        <g class="uni-core" transform="translate(200,200)" aria-hidden="true">
+          <circle r="34"></circle>
+          <text text-anchor="middle" dy="-2">${esc(D.profile.name)}</text>
+          <text class="sub" text-anchor="middle" dy="14">ядро</text>
+        </g>
+        ${nodes}
+      </svg>`;
+    }
+
+    function writeDetail(id, animate) {
+      const u = D.universe.find((x) => x.id === id) || D.universe[0];
+      const statusNote =
+        u.status === "empty"
+          ? "Среза знаний пока нет."
+          : u.status === "watch"
+            ? "Область требует внимания."
+            : "Есть подтверждённый срез.";
+      detailHost.className = page ? "uni-detail is-page" : "uni-detail";
+      if (animate) {
+        detailHost.classList.remove("detail-swap");
+        void detailHost.offsetWidth;
+        detailHost.classList.add("detail-swap");
+      }
+      detailHost.innerHTML = `
+        <p class="d-label">область</p>
+        <h3 id="uniDetailTitle">${esc(u.label)}</h3>
+        <p class="d-blurb" id="uniDetailBlurb">${esc(u.blurb)}</p>
+        <p class="d-meta">${esc(statusNote)} · не KPI · связи не выдуманы</p>`;
+    }
+
+    function setActive(id, { animateDetail = true, focusNode = false } = {}) {
+      selected = id;
+      mapHost.querySelectorAll(".uni-node").forEach((g) => {
+        const on = g.getAttribute("data-node") === id;
+        g.classList.toggle("is-active", on);
+        g.setAttribute("aria-pressed", on ? "true" : "false");
+        if (on && focusNode) g.focus({ preventScroll: true });
+      });
+      writeDetail(id, animateDetail);
+    }
+
+    function onActivate(id) {
+      if (!id) return;
+      setActive(id, { animateDetail: true });
+    }
+
+    function bind() {
+      if (bound) return;
+      bound = true;
+
+      mapHost.addEventListener("click", (e) => {
+        const g = e.target.closest("[data-node]");
+        if (!g || !mapHost.contains(g)) return;
+        onActivate(g.getAttribute("data-node"));
+      });
+
+      mapHost.addEventListener("keydown", (e) => {
+        const g = e.target.closest("[data-node]");
+        if (!g || !mapHost.contains(g)) return;
+        const ids = D.universe.map((u) => u.id);
+        const i = ids.indexOf(g.getAttribute("data-node"));
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onActivate(g.getAttribute("data-node"));
+        } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          const next = ids[(i + 1) % ids.length];
+          setActive(next, { animateDetail: true, focusNode: true });
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          const prev = ids[(i - 1 + ids.length) % ids.length];
+          setActive(prev, { animateDetail: true, focusNode: true });
+        }
+      });
+    }
+
+    function mount() {
+      mapHost.innerHTML = buildSVG();
+      bind();
+      setActive(selected, { animateDetail: false });
+    }
+
+    mount();
+    return { setActive, getSelected: () => selected };
+  }
+
+  function universeBlock(compact) {
+    return `
+      <div class="uni-panel${compact ? "" : " is-page"}">
+        <div class="uni-map-host" data-uni-map></div>
+        <div data-uni-detail></div>
+      </div>`;
+  }
+
+  function wireUniverse(root, opts) {
+    const map = root.querySelector("[data-uni-map]");
+    const detail = root.querySelector("[data-uni-detail]");
+    if (!map || !detail) return null;
+    return UniverseController(map, detail, opts);
   }
 
   function renderHome() {
     const p = D.profile;
     const mq = D.mainQuest;
-    const selected = D.universe[0].id;
+    const values = cluster("values");
     stage.innerHTML = `
-      <div class="bento">
-        <article class="cell s5 r2">
-          <div class="cell-h"><p class="cell-title">Личный статус</p><button class="linkish" type="button" data-go="self">портрет →</button></div>
-          <h2 class="status-name">${esc(p.name)}</h2>
-          <p class="status-role">${esc(p.role)}</p>
-          <p class="status-stage">${esc(p.stage)}</p>
-          <p class="status-focus">${esc(p.focus)}</p>
-          <div class="pills">${p.values.map((v) => `<span class="pill">${esc(v)}</span>`).join("")}</div>
-          <p class="motto">«${esc(p.motto)}»</p>
-        </article>
-
-        <article class="cell s7">
-          <div class="cell-h"><p class="cell-title">Состояние</p><span class="chip">пусто = нет среза</span></div>
-          <div class="state-board">${stateBoard()}</div>
-        </article>
-
-        <article class="cell s7 quest">
-          <div class="quest-badge">main quest</div>
-          <h3>${esc(mq.title)}</h3>
-          <p>${esc(mq.detail)}</p>
-          <p class="cp">checkpoint · ${esc(mq.checkpoint)}</p>
-        </article>
-
-        <article class="cell s12 universe-cell">
-          <div class="cell-h"><p class="cell-title">Моя вселенная</p><span class="chip">сигнатура продукта</span></div>
-          <div class="universe-wrap">
-            <div id="universeMount">${universeSVG(selected)}</div>
-            ${universeDetail(selected)}
+      <div class="home">
+        <section class="intro">
+          <h2 class="intro-name">${esc(p.name)}</h2>
+          <p class="intro-role">${esc(p.role)}</p>
+          <p class="intro-stage">${esc(p.stage)}</p>
+          <div class="focus-block">
+            <p class="focus-label">Фокус</p>
+            <p class="focus-text">${esc(p.focus)}</p>
           </div>
-        </article>
+          <button type="button" class="intro-link" data-go="self">Открыть личность →</button>
+        </section>
 
-        <article class="cell s5">
-          <div class="cell-h"><p class="cell-title">Активные квесты</p></div>
-          <div class="rows">${D.sideQuests
-            .map(
-              (q) => `<div class="row"><span class="dot"></span><div><div class="row-t">${esc(q.title)}</div><div class="row-m">${esc(q.meta)}</div></div></div>`
-            )
-            .join("")}</div>
-        </article>
-
-        <article class="cell s7">
-          <div class="cell-h"><p class="cell-title">Волны вдохновения</p></div>
-          <div class="waves">${D.waves.map((w) => `<span class="wave">${esc(w)}</span>`).join("")}</div>
-        </article>
-
-        <article class="cell s6">
-          <div class="cell-h"><p class="cell-title">Развиватор</p>${D.razvivator.demo ? '<span class="chip demo">демо</span>' : ""}</div>
-          <div class="raz-card">
-            <div class="raz-type">${esc(D.razvivator.type)}</div>
-            <div class="raz-text">${esc(D.razvivator.text)}</div>
+        <section>
+          <p class="section-label">Главная цель</p>
+          <div class="quest-block">
+            <h3 class="quest-title">${esc(mq.title)}</h3>
+            <p class="quest-detail">${esc(mq.detail)}</p>
+            <p class="quest-cp">Контрольная точка · ${esc(mq.checkpoint)}</p>
           </div>
-        </article>
+        </section>
 
-        <article class="cell s6">
-          <div class="cell-h"><p class="cell-title">Прогресс</p></div>
-          ${D.progress.achievements
-            .map((a) => `<div class="prog-line"><span>${esc(a.title)}</span><span>${esc(a.when)}</span></div>`)
-            .join("")}
-          ${D.progress.measurable
-            .map((m) => `<div class="prog-line"><span>${esc(m.label)}</span><span>${esc(m.value)}</span></div>`)
-            .join("")}
-        </article>
+        <section>
+          <p class="section-label">Моя вселенная</p>
+          ${universeBlock(true)}
+          <p class="uni-hint">Выбери область — справа появится доступный срез. Полный экран: «Моя вселенная».</p>
+        </section>
 
-        <article class="cell s12">
-          <div class="cell-h"><p class="cell-title">Активность Harvest</p></div>
-          <div class="rows">${D.recent
-            .map(
-              (r) => `<div class="row"><span class="dot" style="background:var(--accent)"></span><div><div class="row-t">${esc(r.what)}</div><div class="row-m">${esc(r.kind)}</div></div></div>`
-            )
-            .join("")}</div>
-        </article>
+        <section class="home-split">
+          <div>
+            <p class="section-label">Актуальные действия</p>
+            <ul class="action-list">
+              ${D.sideQuests
+                .map(
+                  (q) => `<li><span class="action-t">${esc(q.title)}</span><span class="action-m">${esc(q.meta)}</span></li>`
+                )
+                .join("")}
+            </ul>
+          </div>
+          <div>
+            <p class="section-label">Рекомендация</p>
+            <blockquote class="pull">
+              <p class="pull-type">${esc(D.razvivator.type)}</p>
+              <p class="pull-text">${esc(D.razvivator.text)}</p>
+              ${D.razvivator.demo ? '<p class="pull-demo">демо · не персональный вывод Harvester</p>' : ""}
+            </blockquote>
+          </div>
+        </section>
+
+        <details class="more">
+          <summary>Ещё: волны, прогресс, активность</summary>
+          <div class="more-body">
+            <div>
+              <p class="section-label">Волны</p>
+              <ul class="soft-list">${D.waves.map((w) => `<li><span>${esc(w)}</span><span></span></li>`).join("")}</ul>
+            </div>
+            <div>
+              <p class="section-label">Прогресс</p>
+              <ul class="soft-list">
+                ${D.progress.achievements
+                  .map((a) => `<li><span>${esc(a.title)}</span><span>${esc(a.when)}</span></li>`)
+                  .join("")}
+                ${D.progress.measurable
+                  .map((m) => `<li><span>${esc(m.label)}</span><span>${esc(m.value)}</span></li>`)
+                  .join("")}
+              </ul>
+            </div>
+            <div>
+              <p class="section-label">Активность Harvest</p>
+              <ul class="soft-list">
+                ${D.recent.map((r) => `<li><span>${esc(r.what)}</span><span>${esc(r.kind)}</span></li>`).join("")}
+              </ul>
+            </div>
+            ${
+              values
+                ? `<div><p class="section-label">Ценности (кратко)</p><ul class="soft-list">${values.items
+                    .map((it) => `<li><span>${esc(it.text)}</span><span>${esc(epLabel[it.ep] || it.ep)}</span></li>`)
+                    .join("")}</ul></div>`
+                : ""
+            }
+          </div>
+        </details>
       </div>`;
 
-    bindUniverse();
+    wireUniverse(stage, { initialId: D.universe[0].id });
     stage.querySelector("[data-go]")?.addEventListener("click", () => go("self"));
   }
 
-  function bindUniverse() {
-    const mount = document.getElementById("universeMount");
-    const detail = document.getElementById("universeDetail");
-    if (!mount) return;
-    mount.querySelectorAll("[data-node]").forEach((g) => {
-      g.addEventListener("click", () => {
-        const id = g.getAttribute("data-node");
-        mount.innerHTML = universeSVG(id);
-        detail.outerHTML = universeDetail(id);
-        bindUniverse();
-      });
-    });
+  function renderUniverse() {
+    stage.innerHTML = `
+      <p class="uni-page-lead">Жизненные области вокруг ядра. Выбери узел — увидишь доступный срез знаний. Это карта навигации, не граф доказанных связей и не шкала личности.</p>
+      ${universeBlock(false)}
+      <p class="uni-hint">Клавиатура: Tab → узел · Enter · стрелки между областями.</p>`;
+    wireUniverse(stage, { page: true, initialId: D.universe[0].id });
   }
 
   function renderSelf() {
     const core = D.portrait.core;
-    const clusters = D.portrait.clusters
-      .map(
-        (c, i) => `<div class="cluster${i === 0 ? " is-open" : ""}" data-cluster="${c.id}">
-        <h3>${esc(c.title)}</h3>
-        <ul>${c.items.map((it) => `<li data-ep="${it.ep}">${esc(it.text)}</li>`).join("")}</ul>
-      </div>`
-      )
-      .join("");
+    const values = cluster("values");
+    const mind = cluster("mind");
+    const drive = cluster("drive");
+    const edge = cluster("edge");
+    const grow = cluster("grow");
+    const craft = cluster("craft");
+    const spark = cluster("spark");
+    const tension = cluster("tension");
+    const future = cluster("future");
 
     stage.innerHTML = `
-      <div class="legend">
-        <span><i style="background:var(--life)"></i>факт</span>
-        <span><i style="background:var(--intent)"></i>намерение</span>
-        <span><i style="background:var(--hypo)"></i>гипотеза</span>
-        <span><i style="background:var(--open)"></i>открытый вопрос</span>
-      </div>
-      <div class="actions">
-        <button class="btn" type="button" disabled>Открыть источник</button>
-        <button class="btn" type="button" disabled>Оспорить вывод</button>
-        <button class="btn" type="button" disabled>Дополнить</button>
-        <span class="chip">скоро</span>
-      </div>
-      <div class="char">
-        <section class="core">
-          <p class="eyebrow">${esc(core.title)}</p>
-          <h2>${esc(D.profile.name)}</h2>
-          <p class="lead">${esc(core.lead)}</p>
-          <div class="meta">${D.profile.values.map((v) => `<span class="pill">${esc(v)}</span>`).join("")}</div>
-          <p class="motto" style="margin-top:18px">«${esc(D.profile.motto)}»</p>
+      <div class="persona">
+        <section class="persona-hero">
+          <p class="persona-kicker">${esc(core.title)}</p>
+          <h2 class="persona-name">${esc(D.profile.name)}</h2>
+          <p class="persona-lead">${esc(core.lead)}</p>
+          <p class="persona-motto">«${esc(D.profile.motto)}»</p>
         </section>
-        <div>
-          <div class="cluster-grid">${clusters}</div>
-          <div class="history">
-            <p class="cell-title" style="margin-bottom:8px">История изменений</p>
-            ${D.portrait.history
-              .map((h) => `<div class="prog-line"><span>${esc(h.text)}</span><span>${esc(h.when)}</span></div>`)
+
+        <div class="ep-legend" aria-label="Эпистемическая легенда">
+          <span><i class="f"></i>факт</span>
+          <span><i class="i"></i>намерение</span>
+          <span><i class="h"></i>гипотеза</span>
+          <span><i class="o"></i>открытый вопрос</span>
+        </div>
+
+        ${
+          values
+            ? `<section>
+          <p class="section-label">${esc(values.title)}</p>
+          <div class="values">
+            ${values.items
+              .map(
+                (it) => `<div class="value-row" data-ep="${esc(it.ep)}"><span class="mark" aria-hidden="true"></span><p>${esc(it.text)}</p></div>`
+              )
               .join("")}
           </div>
-        </div>
+        </section>`
+            : ""
+        }
+
+        <section class="two-col">
+          ${
+            mind
+              ? `<div class="block"><h2>${esc(mind.title)}</h2><ul>${itemsHtml(mind.items)}</ul></div>`
+              : ""
+          }
+          ${
+            drive
+              ? `<div class="block"><h2>${esc(drive.title)}</h2><ul>${itemsHtml(drive.items)}</ul></div>`
+              : ""
+          }
+        </section>
+
+        <section class="two-col">
+          ${
+            edge
+              ? `<div class="block"><h2>${esc(edge.title)}</h2><ul>${itemsHtml(edge.items)}</ul></div>`
+              : ""
+          }
+          ${
+            grow
+              ? `<div class="block"><h2>${esc(grow.title)}</h2><ul>${itemsHtml(grow.items)}</ul></div>`
+              : ""
+          }
+        </section>
+
+        <details class="more">
+          <summary>Компетенции, интересы, напряжения, желаемый образ</summary>
+          <div class="more-body two-col" style="padding-top:16px">
+            ${craft ? `<div class="block"><h2>${esc(craft.title)}</h2><ul>${itemsHtml(craft.items)}</ul></div>` : ""}
+            ${spark ? `<div class="block"><h2>${esc(spark.title)}</h2><ul>${itemsHtml(spark.items)}</ul></div>` : ""}
+            ${tension ? `<div class="block"><h2>${esc(tension.title)}</h2><ul>${itemsHtml(tension.items)}</ul></div>` : ""}
+            ${future ? `<div class="block"><h2>${esc(future.title)}</h2><ul>${itemsHtml(future.items)}</ul></div>` : ""}
+          </div>
+        </details>
+
+        <section>
+          <p class="section-label">История изменений</p>
+          <ol class="timeline">
+            ${D.portrait.history
+              .map((h) => `<li><time datetime="${esc(h.when)}">${esc(h.when)}</time><span>${esc(h.text)}</span></li>`)
+              .join("")}
+          </ol>
+        </section>
       </div>`;
-
-    stage.querySelectorAll("[data-cluster]").forEach((el) => {
-      el.addEventListener("click", () => {
-        el.classList.toggle("is-open");
-      });
-    });
-  }
-
-  function renderStub(route) {
-    const t = titles[route]?.[1] || route;
-    stage.innerHTML = `<div class="stub"><h2>${esc(t)}</h2><p>Раздел в композиции Life OS. Функциональность появится позже. Знания остаются в harvest/.</p></div>`;
   }
 
   function go(route) {
-    const meta = titles[route] || ["Live Harvest", route];
+    const meta = titles[route] || titles.home;
+    const r = titles[route] ? route : "home";
     kicker.textContent = meta[0];
-    title.textContent = meta[1];
+    titleEl.textContent = meta[1];
     document.querySelectorAll(".nav-btn[data-route]").forEach((b) => {
-      b.classList.toggle("is-active", b.getAttribute("data-route") === route);
+      b.classList.toggle("is-active", b.getAttribute("data-route") === r);
     });
-    if (route === "home") renderHome();
-    else if (route === "self") renderSelf();
-    else renderStub(route);
-    if (location.hash.slice(1) !== route) location.hash = route;
+    if (r === "home") renderHome();
+    else if (r === "self") renderSelf();
+    else if (r === "universe") renderUniverse();
+    if (location.hash.slice(1) !== r) location.hash = r;
   }
 
   document.querySelectorAll(".nav-btn[data-route]").forEach((b) => {

@@ -1,5 +1,5 @@
 window.LH_DATA = {
-  meta: { version: "0.3", asOf: "2026-11-25", product: "Personal Command Center" },
+  meta: { version: "0.4", asOf: "2026-11-25", product: "Personal Command Center" },
   profile: {
     name: "Сергей",
     role: "Тимлид 1С · основатель Live Harvest",
