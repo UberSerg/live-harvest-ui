@@ -394,6 +394,35 @@ a{color:inherit}
   color:var(--accent);font:500 13px/1 var(--mono);
 }
 .cap-form button:hover{background:var(--accent-soft)}
+.cap-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cap-preset{
+  padding:6px 10px;border-radius:6px;border:1px solid var(--line-soft);
+  color:var(--faint);font:500 11px/1 var(--mono);
+}
+.cap-preset:hover{color:var(--text);border-color:var(--line)}
+.cap-import-report{padding:12px 0 8px;border-bottom:1px solid var(--line-soft)}
+.cap-import-card{width:min(720px,100%);max-height:min(90vh,900px);overflow:auto}
+.cap-import-ta{
+  width:100%;min-height:220px;resize:vertical;
+  background:var(--bg);border:1px solid var(--line);color:var(--text);
+  border-radius:8px;padding:12px;font:400 13px/1.45 var(--mono);
+}
+.cap-spend{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:start}
+.cap-doughnut-wrap{position:relative}
+.cap-doughnut-stage{position:relative;max-width:360px;margin:0 auto}
+.cap-doughnut-center{
+  position:absolute;inset:0;display:grid;place-content:center;text-align:center;
+  pointer-events:none;padding-top:8px;
+}
+.cap-doughnut-center .cap-num{font-size:22px;color:var(--life)}
+.cap-legend{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.cap-legend li{
+  display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--line-soft);cursor:pointer;font-size:13px;
+}
+.cap-legend li:hover{color:var(--accent)}
+.cap-swatch{width:12px;height:12px;border-radius:3px}
+.cap-drill{margin-top:16px;padding-top:12px;border-top:1px solid var(--line-soft)}
 .cap-tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line-soft);padding-bottom:2px}
 .cap-tab{
   padding:10px 14px;border-radius:8px 8px 0 0;color:var(--muted);
@@ -463,6 +492,6 @@ a{color:inherit}
   .top{flex-direction:column;align-items:start}
   .intro-name,.persona-name{font-size:36px}
   .focus-text{font-size:18px}
-  .cap-hero,.cap-pos,.cap-charts,.cap-wide{grid-template-columns:1fr}
+  .cap-hero,.cap-pos,.cap-charts,.cap-wide,.cap-spend{grid-template-columns:1fr}
   .cap-hero-stat{text-align:left}
 }

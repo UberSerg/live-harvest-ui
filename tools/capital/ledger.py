@@ -218,22 +218,39 @@ def liability_principals(
     return out
 
 
+def _counts_in_flows(tx: dict) -> bool:
+    """Exclude needs_review / internal transfers from consumer income-expense stats."""
+    if tx.get("classification_status") == "needs_review":
+        return False
+    if tx.get("include_in_flows") is False:
+        return False
+    ek = tx.get("economic_kind")
+    if ek in ("transfer_internal", "transfer_other", "investment_funding", "undefined"):
+        return False
+    return True
+
+
 def period_flows(
     transactions: list[dict],
     date_from: str,
     date_to: str,
     *,
     statuses: set[str] | None = None,
+    consumer_only: bool = True,
 ) -> dict[str, int]:
     """Sum income/expense (not transfers, not principal) in [from, to]."""
     allow = statuses or ACTUAL_FLOW
     income = 0
     expense = 0
+    skipped_review = 0
     for tx in transactions:
         if tx.get("status") == "void" or tx.get("status") not in allow:
             continue
         d = tx.get("date") or ""
         if d < date_from or d > date_to:
+            continue
+        if consumer_only and not _counts_in_flows(tx):
+            skipped_review += 1
             continue
         t = tx.get("type")
         amt = int(tx["amount_minor"])
@@ -245,6 +262,7 @@ def period_flows(
         "income_minor": income,
         "expense_minor": expense,
         "net_cashflow_minor": income - expense,
+        "excluded_ops": skipped_review,
     }
 
 
@@ -347,12 +365,94 @@ def expense_by_category(transactions: list[dict], date_from: str, date_to: str) 
     for tx in transactions:
         if not _ok(tx) or tx.get("type") not in TX_OUT:
             continue
+        if not _counts_in_flows(tx):
+            continue
         d = tx.get("date") or ""
         if d < date_from or d > date_to:
             continue
         cat = tx.get("category_id") or "uncategorized"
         out[cat] += int(tx["amount_minor"])
     return dict(out)
+
+
+def expense_analytics(
+    transactions: list[dict],
+    categories: list[dict],
+    date_from: str,
+    date_to: str,
+    *,
+    account_id: str | None = None,
+) -> dict[str, Any]:
+    """Doughnut-ready expense breakdown + top merchants (consumer confirmed only)."""
+    cat_name = {c["id"]: c["name"] for c in categories}
+    by_cat: dict[str, int] = defaultdict(int)
+    by_merchant: dict[str, int] = defaultdict(int)
+    ops_by_cat: dict[str, list[dict]] = defaultdict(list)
+    largest = []
+    for tx in transactions:
+        if not _ok(tx) or tx.get("type") not in TX_OUT:
+            continue
+        if not _counts_in_flows(tx):
+            continue
+        if account_id and tx.get("account_id") != account_id:
+            continue
+        d = tx.get("date") or ""
+        if d < date_from or d > date_to:
+            continue
+        cid = tx.get("category_id") or "uncategorized"
+        amt = int(tx["amount_minor"])
+        by_cat[cid] += amt
+        merch = tx.get("merchant") or "—"
+        by_merchant[merch] += amt
+        ops_by_cat[cid].append(
+            {
+                "id": tx.get("id"),
+                "date": d,
+                "amount_minor": amt,
+                "merchant": merch,
+                "comment": tx.get("comment") or tx.get("description") or "",
+            }
+        )
+        largest.append(
+            {
+                "id": tx.get("id"),
+                "date": d,
+                "amount_minor": amt,
+                "merchant": merch,
+                "category": cat_name.get(cid, cid),
+            }
+        )
+    total = sum(by_cat.values())
+    segments = []
+    for cid, amt in sorted(by_cat.items(), key=lambda x: -x[1]):
+        segments.append(
+            {
+                "category_id": cid,
+                "name": cat_name.get(cid, cid),
+                "amount_minor": amt,
+                "share": round(amt / total, 4) if total else 0,
+                "operations": sorted(ops_by_cat[cid], key=lambda x: x["date"], reverse=True),
+            }
+        )
+    needs = [
+        t
+        for t in transactions
+        if t.get("status") == "actual"
+        and t.get("classification_status") == "needs_review"
+        and date_from <= (t.get("date") or "") <= date_to
+        and (not account_id or t.get("account_id") == account_id)
+    ]
+    return {
+        "total_expense_minor": total,
+        "segments": segments,
+        "top_merchants": sorted(
+            [{"merchant": k, "amount_minor": v} for k, v in by_merchant.items()],
+            key=lambda x: -x["amount_minor"],
+        )[:15],
+        "largest_purchases": sorted(largest, key=lambda x: -x["amount_minor"])[:15],
+        "needs_review_count": len(needs),
+        "period": {"from": date_from, "to": date_to},
+    }
 
 
 def monthly_series(

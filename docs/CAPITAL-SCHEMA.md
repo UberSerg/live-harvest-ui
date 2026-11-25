@@ -70,6 +70,15 @@ account_kind: checking|savings|deposit|cash|broker|other
 - Correction: void + replacement + journal **под одним lock**.
 - Дубликаты: 409 `duplicate_suspect` без `allow_duplicate`.
 
+## Импорт выписки (CAPITAL-03)
+
+- Парсер: `tools/capital/statement_parse.py` (локально, без LLM).
+- Пакет: `import_batches/`; правила: `classification_rules/`.
+- Поля tx: `batch_id`, `fingerprint`, `direction`, `bank_category`, `merchant`, `authorization_code`, `classification_status`, `include_in_flows`, `economic_kind`, `imported_at`.
+- Сырой текст выписки **не** хранится.
+- `needs_review` / internal transfers не входят в consumer income-expense и doughnut.
+
 ## API
 
-Только `127.0.0.1:8777`, заголовок `X-LH-Capital: local`, Origin localhost.
+Только `127.0.0.1:8777`, заголовок `X-LH-Capital: local`, Origin localhost.  
+Импорт: `POST /api/import/statement` (text | file_base64).

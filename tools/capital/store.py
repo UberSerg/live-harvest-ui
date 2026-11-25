@@ -31,6 +31,8 @@ KINDS = {
     "fx_rate": "fx_rates",
     "balance_statement": "balance_statements",
     "fi_params": "fi_params",
+    "import_batch": "import_batches",
+    "classification_rule": "classification_rules",
 }
 
 REQUIRED_TX = {"kind", "type", "date", "amount_minor", "currency", "account_id", "status"}
@@ -206,6 +208,8 @@ class CapitalStore:
                 "fx_rate": "fx",
                 "balance_statement": "bst",
                 "fi_params": "fi",
+                "import_batch": "batch",
+                "classification_rule": "rule",
             }[kind]
             data["id"] = self.new_id(prefix)
         if not data.get("created_at"):
@@ -500,12 +504,19 @@ class CapitalStore:
         recurring_month = ledger.recurring_monthly_net(recurring)
         nw = ledger.net_worth(bals, assets, lia_map, valuations, fx_rates=fx_rates, as_of=as_of)
         by_cat = ledger.expense_by_category(txs, date_from, date_to)
+        expense_analytics = ledger.expense_analytics(txs, categories, date_from, date_to)
         months = sorted({t["date"][:7] for t in txs if t.get("date") and date_from <= t["date"] <= date_to})
         if not months:
             months = sorted({date_from[:7], date_to[:7]})
         series = ledger.monthly_series(txs, months)
         series_planned = ledger.monthly_series(txs, months, statuses={"planned"})
         budget = ledger.budget_view(txs, recurring, categories, date_from, date_to)
+        batches = [b for b in self.list_kind("import_batch") if b.get("status") != "void"]
+        review_ops = [
+            t
+            for t in txs
+            if t.get("status") == "actual" and t.get("classification_status") == "needs_review"
+        ]
         fi_params = self.get_fi_params()
         # savings estimate: only if budget free_cash_complete OR user set monthly_savings
         monthly_sav = None
@@ -540,6 +551,9 @@ class CapitalStore:
             "recurring_monthly": recurring_month,
             "net_worth": nw,
             "expense_by_category": by_cat,
+            "expense_analytics": expense_analytics,
+            "import_batches": sorted(batches, key=lambda x: x.get("imported_at") or "", reverse=True)[:20],
+            "needs_review": sorted(review_ops, key=lambda x: x.get("date") or "", reverse=True)[:100],
             "monthly": series,
             "monthly_planned": series_planned,
             "budget": budget,

@@ -1,6 +1,9 @@
-﻿Thumbs.db
+Thumbs.db
 Desktop.ini
 .DS_Store
 *.log
 .env
 *.pem
+# never commit real statements
+*_statement_real*
+*выписка*

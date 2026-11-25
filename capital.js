@@ -133,24 +133,220 @@
                 <input type="date" id="capTo" value="${p.to}" />
                 <button type="button" class="btn-refresh" id="capReload">Обновить</button>
               </div>
+              <div class="cap-presets" id="capPresets"></div>
             </div>
             <div class="cap-mode">
+              <button type="button" class="btn-primary" id="capImportBtn">Импорт выписки</button>
               <span class="cap-api" id="capApi">API…</span>
             </div>
           </div>
           <nav class="cap-tabs" id="capTabs" role="tablist"></nav>
           <p class="cap-banner" id="capBanner">Загрузка…</p>
+          <div id="capImportReport" class="cap-import-report is-hidden"></div>
           <div id="capBody"></div>
           <div class="cap-toast" id="capToast" role="status"></div>
           <div class="cap-dialog" id="capDialog"></div>
+          <div class="cap-dialog" id="capImportModal"></div>
         </div>`;
       renderTabs();
+      renderPresets();
       document.getElementById("capReload").onclick = () => reload();
       document.getElementById("capFrom").onchange = () => reload();
       document.getElementById("capTo").onchange = () => reload();
+      document.getElementById("capImportBtn").onclick = () => openImportModal();
       await reload();
     },
   };
+
+  function renderPresets() {
+    const host = document.getElementById("capPresets");
+    if (!host) return;
+    const items = [
+      ["this_month", "Этот месяц"],
+      ["last_month", "Прошлый месяц"],
+      ["m3", "3 мес"],
+      ["m6", "6 мес"],
+      ["year", "Год"],
+      ["all", "Весь период"],
+    ];
+    host.innerHTML = items
+      .map(([id, label]) => `<button type="button" class="cap-preset" data-p="${id}">${label}</button>`)
+      .join("");
+    host.querySelectorAll("[data-p]").forEach((btn) => {
+      btn.onclick = () => {
+        const now = new Date();
+        const iso = (d) => d.toISOString().slice(0, 10);
+        const id = btn.getAttribute("data-p");
+        let from;
+        let to = iso(now);
+        if (id === "this_month") from = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+        else if (id === "last_month") {
+          from = iso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+          to = iso(new Date(now.getFullYear(), now.getMonth(), 0));
+        } else if (id === "m3") from = iso(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+        else if (id === "m6") from = iso(new Date(now.getFullYear(), now.getMonth() - 5, 1));
+        else if (id === "year") from = iso(new Date(now.getFullYear(), 0, 1));
+        else from = "2020-01-01";
+        document.getElementById("capFrom").value = from;
+        document.getElementById("capTo").value = to;
+        reload();
+      };
+    });
+  }
+
+  function openImportModal() {
+    const root = document.getElementById("capImportModal");
+    const accounts = (state.summary && state.summary.accounts) || [];
+    const accOpts = accounts
+      .map((a) => `<option value="${esc(a.id)}">${esc(a.name)} · ${esc(a.currency || "RUB")}</option>`)
+      .join("");
+    root.innerHTML = `
+      <div class="cap-dialog-card cap-import-card" role="dialog" aria-modal="true">
+        <h3>Импорт банковской выписки</h3>
+        <p class="cap-sub">Текст обрабатывается только на localhost. Исходник не пишется в Git и localStorage.</p>
+        <label class="cap-sub">Счёт</label>
+        <div class="cap-form" style="margin:0">
+          <select id="impAcc">${accOpts || '<option value="">нет счетов</option>'}</select>
+          <button type="button" class="btn-ghost" id="impNewAcc">Новый счёт</button>
+        </div>
+        <div id="impNewAccBox" class="is-hidden cap-form">
+          <input id="impNewName" placeholder="Название счёта" />
+          <select id="impNewCur"><option>RUB</option><option>USD</option><option>EUR</option></select>
+          <button type="button" class="btn-primary" id="impCreateAcc">Создать</button>
+        </div>
+        <label class="cap-sub">Вставь текст выписки (Ctrl+V)</label>
+        <textarea id="impText" class="cap-import-ta" placeholder="ДАТА ОПЕРАЦИИ (МСК)…" spellcheck="false"></textarea>
+        <label class="cap-sub">или файл TXT / PDF (текстовый слой)</label>
+        <input type="file" id="impFile" accept=".txt,.pdf,text/plain,application/pdf" />
+        <div class="cap-dialog-actions">
+          <button type="button" class="btn-ghost" id="impCancel">Отмена</button>
+          <button type="button" class="btn-primary" id="impGo">Импортировать</button>
+        </div>
+        <p class="cap-sub" id="impStatus"></p>
+      </div>`;
+    root.classList.add("is-open");
+    const close = () => {
+      root.classList.remove("is-open");
+      root.innerHTML = "";
+    };
+    root.querySelector("#impCancel").onclick = close;
+    root.onclick = (e) => {
+      if (e.target === root) close();
+    };
+    root.querySelector("#impNewAcc").onclick = () => {
+      root.querySelector("#impNewAccBox").classList.toggle("is-hidden");
+    };
+    root.querySelector("#impCreateAcc").onclick = async () => {
+      const name = root.querySelector("#impNewName").value.trim();
+      if (!name) return toast("Укажи название", "err");
+      try {
+        const saved = await api("/api/accounts", {
+          method: "POST",
+          body: JSON.stringify({
+            name,
+            currency: root.querySelector("#impNewCur").value,
+            balance_known: false,
+            opening_balance_minor: null,
+            account_kind: "checking",
+          }),
+        });
+        const sel = root.querySelector("#impAcc");
+        const opt = document.createElement("option");
+        opt.value = saved.id;
+        opt.textContent = saved.name;
+        opt.selected = true;
+        sel.appendChild(opt);
+        toast("Счёт создан", "ok");
+        root.querySelector("#impNewAccBox").classList.add("is-hidden");
+      } catch (e) {
+        toast(e.message, "err");
+      }
+    };
+    root.querySelector("#impGo").onclick = async () => {
+      const status = root.querySelector("#impStatus");
+      const account_id = root.querySelector("#impAcc").value;
+      if (!account_id) {
+        toast("Выбери счёт", "err");
+        return;
+      }
+      status.textContent = "Обработка…";
+      const file = root.querySelector("#impFile").files[0];
+      let payload = { account_id };
+      try {
+        if (file) {
+          const buf = await file.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          let binary = "";
+          const chunk = 0x8000;
+          for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+          }
+          payload.file_base64 = btoa(binary);
+          payload.filename = file.name;
+        } else {
+          payload.text = root.querySelector("#impText").value;
+          if (!payload.text.trim()) {
+            toast("Вставь текст или выбери файл", "err");
+            status.textContent = "";
+            return;
+          }
+        }
+        const data = await api("/api/import/statement", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        // clear sensitive fields from DOM
+        root.querySelector("#impText").value = "";
+        root.querySelector("#impFile").value = "";
+        close();
+        showImportReport(data);
+        toast(`Импорт: ${data.imported} операций`, "ok");
+        await reload();
+      } catch (e) {
+        status.textContent = "Ошибка: " + e.message;
+        toast(e.message, "err");
+      }
+    };
+  }
+
+  function showImportReport(data) {
+    const el = document.getElementById("capImportReport");
+    if (!el) return;
+    el.classList.remove("is-hidden");
+    el.innerHTML = `
+      <p class="section-label">Отчёт импорта</p>
+      <div class="cap-pos">
+        <div class="cap-kpi is-positive"><p class="section-label">Импортировано</p><p class="cap-num">${esc(data.imported)}</p></div>
+        <div class="cap-kpi"><p class="section-label">Дубликаты</p><p class="cap-num">${esc(data.duplicates_skipped)}</p></div>
+        <div class="cap-kpi"><p class="section-label">Категории</p><p class="cap-num">${esc(data.categories_created)}</p></div>
+        <div class="cap-kpi"><p class="section-label">Уточнить</p><p class="cap-num">${esc(data.needs_review)}</p></div>
+      </div>
+      <p class="cap-sub">Период ${esc(data.date_from || "—")} — ${esc(data.date_to || "—")} · batch ${esc(data.batch_id || "")}
+        ${data.unrecognized_lines ? " · нераспознанных строк: " + esc(data.unrecognized_lines) : ""}
+        ${
+          data.batch_id
+            ? ` · <button type="button" class="linkish" id="capVoidBatch">отменить пакет</button>`
+            : ""
+        }
+      </p>`;
+    const voidBtn = document.getElementById("capVoidBatch");
+    if (voidBtn) {
+      voidBtn.onclick = async () => {
+        if (!(await dialog({ title: "Отменить импорт?", body: "Все операции пакета станут void." }))) return;
+        try {
+          await api("/api/import/void", {
+            method: "POST",
+            body: JSON.stringify({ batch_id: data.batch_id }),
+          });
+          toast("Пакет отменён", "ok");
+          el.classList.add("is-hidden");
+          await reload();
+        } catch (e) {
+          toast(e.message, "err");
+        }
+      };
+    }
+  }
 
   function renderTabs() {
     const nav = document.getElementById("capTabs");
@@ -282,6 +478,23 @@
             .join("") || "<li><span>Нет обязательств</span><span></span></li>"}</ul>
         </div>
       </details>
+      <section class="cap-spend">
+        <div class="cap-doughnut-wrap">
+          <p class="section-label">Расходы по категориям</p>
+          <div class="cap-doughnut-stage">
+            <canvas id="chartExp" height="220"></canvas>
+            <div class="cap-doughnut-center" id="capExpCenter">
+              <p class="cap-sub">всего</p>
+              <p class="cap-num" id="capExpTotal">—</p>
+            </div>
+          </div>
+        </div>
+        <div>
+          <p class="section-label">Категории</p>
+          <ul class="cap-legend" id="capExpLegend"></ul>
+          <div id="capExpDrill" class="cap-drill is-hidden"></div>
+        </div>
+      </section>
       <section class="cap-charts">
         <div class="cap-chart-box">
           <p class="section-label">Доходы и расходы по месяцам (факт)</p>
@@ -294,8 +507,9 @@
       </section>
       <section class="cap-wide">
         <div>
-          <p class="section-label">Структура расходов</p>
-          <canvas id="chartExp" height="160"></canvas>
+          <p class="section-label">Требуют уточнения</p>
+          <ul class="soft-list" id="capReviewList"></ul>
+          <div id="capHarvestQ"></div>
         </div>
         <div>
           <p class="section-label">FI / цели</p>
@@ -309,12 +523,8 @@
                  }</p>`
               : `<p class="cap-sub">Параметры FI ещё не подтверждены — вкладка «Цели / FI».</p>`
           }
-          <p class="section-label" style="margin-top:18px">Связи Harvest</p>
-          <ul class="soft-list">
-            <li><span>Финансовая независимость и капитал</span><span>цель</span></li>
-            <li><span>Капитал — регулярные потоки</span><span>план</span></li>
-            <li><span>Кеш — текущий</span><span>срез</span></li>
-          </ul>
+          <p class="section-label" style="margin-top:18px">Последние импорты</p>
+          <ul class="soft-list" id="capBatches"></ul>
         </div>
       </section>`;
   }
@@ -685,6 +895,7 @@
   function bindView(tab, s) {
     if (tab === "overview") {
       renderOverviewCharts(s);
+      bindOverviewExtras(s);
       return;
     }
     if (tab === "ops") {
@@ -1148,13 +1359,97 @@
     });
   }
 
+  const DONUT_COLORS = ["#c9a27a", "#5cb88a", "#7eb6d9", "#d48a78", "#9a9aa3", "#cbb46a", "#8a7ec8", "#6aa8a1", "#c47a9a", "#a3b56e"];
+
+  function bindOverviewExtras(s) {
+    const review = s.needs_review || [];
+    const ul = document.getElementById("capReviewList");
+    if (ul) {
+      if (!review.length) ul.innerHTML = "<li><span>Нет неоднозначных операций</span><span></span></li>";
+      else
+        ul.innerHTML = review
+          .slice(0, 8)
+          .map(
+            (t) =>
+              `<li><span>${esc(t.date)} · ${esc(t.merchant || t.bank_category || t.type)}</span><span>${esc(
+                fmt(t.amount_minor, t.currency)
+              )}</span></li>`
+          )
+          .join("");
+    }
+    const batches = s.import_batches || [];
+    const bu = document.getElementById("capBatches");
+    if (bu) {
+      bu.innerHTML = batches.length
+        ? batches
+            .slice(0, 5)
+            .map(
+              (b) =>
+                `<li><span>${esc(b.imported_at || "")} · ${esc(b.imported_count)} ops</span><span>${esc(
+                  b.batch_id
+                )}</span></li>`
+            )
+            .join("")
+        : "<li><span>Импортов пока нет</span><span></span></li>";
+    }
+    // one harvester question from latest batch
+    const qHost = document.getElementById("capHarvestQ");
+    const q =
+      (batches[0] && batches[0].harvester_queue && batches[0].harvester_queue[0]) || null;
+    if (qHost && q) {
+      qHost.innerHTML = `
+        <p class="section-label" style="margin-top:16px">Financial Harvester</p>
+        <p class="cap-gaps">${esc(q.question)}</p>
+        <form id="capHqForm" class="cap-form">
+          <select name="kind">
+            <option value="purchase|expense">покупка / расход</option>
+            <option value="salary|income">зарплата</option>
+            <option value="other_income|income">прочий доход</option>
+            <option value="transfer_internal|expense">перевод себе</option>
+            <option value="transfer_other|expense">перевод людям</option>
+            <option value="cashback|income">кешбэк</option>
+          </select>
+          <input name="cat" placeholder="Категория Harvest" value="${esc(q.bank_category || "Прочее")}" />
+          <label class="cap-check"><input type="checkbox" name="remember" checked /> запомнить правило</label>
+          <button type="submit" class="btn-primary">Применить ко всем (${esc(q.count)})</button>
+        </form>`;
+      qHost.querySelector("#capHqForm").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const [economic_kind, ledger_type] = String(fd.get("kind")).split("|");
+        const remember = fd.get("remember")
+          ? {
+              match: "merchant",
+              pattern: (q.merchant || q.bank_category || "").toLowerCase(),
+              category_name: fd.get("cat"),
+              economic_kind,
+              ledger_type,
+            }
+          : null;
+        try {
+          await api("/api/import/classify", {
+            method: "POST",
+            body: JSON.stringify({
+              fingerprints: q.fingerprints || [],
+              category_name: fd.get("cat"),
+              economic_kind,
+              ledger_type,
+              remember,
+            }),
+          });
+          toast("Классификация обновлена", "ok");
+          await reload();
+        } catch (err) {
+          toast(err.message, "err");
+        }
+      };
+    }
+  }
+
   function renderOverviewCharts(s) {
     if (typeof Chart === "undefined") return;
     const monthly = s.monthly || [];
     const planned = s.monthly_planned || [];
-    if (!monthly.length || monthly.every((m) => !m.income_minor && !m.expense_minor)) {
-      // still draw empty axes lightly — or skip
-    }
     const ctx1 = document.getElementById("chartFlow");
     if (ctx1) {
       charts.push(
@@ -1200,27 +1495,80 @@
         })
       );
     }
-    const byCat = s.expense_by_category || {};
-    const catName = Object.fromEntries((s.categories || []).map((c) => [c.id, c.name]));
-    const labels = Object.keys(byCat);
+    renderExpenseDoughnut(s.expense_analytics || {});
+  }
+
+  function renderExpenseDoughnut(ea) {
     const ctx2 = document.getElementById("chartExp");
-    if (ctx2 && labels.length) {
-      charts.push(
-        new Chart(ctx2, {
-          type: "doughnut",
-          data: {
-            labels: labels.map((id) => catName[id] || id),
-            datasets: [
-              {
-                data: labels.map((id) => byCat[id] / 100),
-                backgroundColor: ["#c9a27a", "#5cb88a", "#7eb6d9", "#d48a78", "#9a9aa3", "#cbb46a"],
-              },
-            ],
-          },
-          options: { plugins: { legend: { labels: { color: "#9a9aa3" } } } },
-        })
-      );
+    const legend = document.getElementById("capExpLegend");
+    const totalEl = document.getElementById("capExpTotal");
+    if (!ctx2) return;
+    const segments = ea.segments || [];
+    if (totalEl) totalEl.textContent = fmt(ea.total_expense_minor || 0);
+    if (!segments.length) {
+      if (legend) legend.innerHTML = "<li>Нет подтверждённых расходов за период</li>";
+      return;
     }
+    if (legend) {
+      legend.innerHTML = segments
+        .map(
+          (seg, i) =>
+            `<li data-seg="${i}"><span class="cap-swatch" style="background:${DONUT_COLORS[i % DONUT_COLORS.length]}"></span>
+              <span>${esc(seg.name)}</span>
+              <span>${esc(fmt(seg.amount_minor))} · ${esc(((seg.share || 0) * 100).toFixed(1))}%</span></li>`
+        )
+        .join("");
+      legend.querySelectorAll("[data-seg]").forEach((li) => {
+        li.onclick = () => showDrill(segments[Number(li.getAttribute("data-seg"))]);
+      });
+    }
+    const chart = new Chart(ctx2, {
+      type: "doughnut",
+      data: {
+        labels: segments.map((s) => s.name),
+        datasets: [
+          {
+            data: segments.map((s) => s.amount_minor / 100),
+            backgroundColor: segments.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]),
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: {
+        cutout: "68%",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const seg = segments[ctx.dataIndex];
+                return `${seg.name}: ${fmt(seg.amount_minor)} (${((seg.share || 0) * 100).toFixed(1)}%)`;
+              },
+            },
+          },
+        },
+        onClick: (_e, els) => {
+          if (!els.length) return;
+          showDrill(segments[els[0].index]);
+        },
+      },
+    });
+    charts.push(chart);
+  }
+
+  function showDrill(seg) {
+    const host = document.getElementById("capExpDrill");
+    if (!host || !seg) return;
+    host.classList.remove("is-hidden");
+    host.innerHTML = `
+      <p class="section-label">${esc(seg.name)} · ${esc(fmt(seg.amount_minor))}</p>
+      <ul class="soft-list">${(seg.operations || [])
+        .slice(0, 20)
+        .map(
+          (o) =>
+            `<li><span>${esc(o.date)} · ${esc(o.merchant)}</span><span>${esc(fmt(o.amount_minor))}</span></li>`
+        )
+        .join("")}</ul>`;
   }
 
   function renderAssetChart(s) {

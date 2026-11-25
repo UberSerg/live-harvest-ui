@@ -20,3 +20,10 @@
 `tools/lh_ui_snapshot.py` пишет только локальные `harvest-ui/snapshot.json` и `data.js`.  
 Флаг `--also-demo` **запрещён** для реальных данных: demo-фикстуры не перезаписываются harvest SoT.  
 Публичный репозиторий синхронизируется с `demo/snapshot.demo.json`, не с личным snapshot.
+
+## Импорт выписки
+
+- Обработка только через localhost Capital API.
+- Не передавать текст выписки в чат Cursor / GitHub / agent logs.
+- Не сохранять raw statement в localStorage и YAML.
+- Тесты — только synthetic (`tools/capital/fixtures/`, `gen_synthetic_statement.py`).

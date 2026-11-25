@@ -15,11 +15,19 @@ sys.path.insert(0, str(ROOT))
 
 from tools.capital import ledger  # noqa: E402
 from tools.capital.money import to_minor  # noqa: E402
+from tools.capital.statement_import import (  # noqa: E402
+    apply_classification_to_similar,
+    build_import_plan,
+    decode_upload_payload,
+    execute_import,
+    void_batch,
+)
 from tools.capital.store import CapitalStore  # noqa: E402
 
 HOST = "127.0.0.1"
 PORT = 8777
 STORE = CapitalStore()
+API_VERSION = "0.3"
 
 
 def _json(handler: BaseHTTPRequestHandler, code: int, payload: dict) -> None:
@@ -105,13 +113,34 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
         if u.path == "/api/health":
-            _json(self, 200, {"ok": True, "service": "capital", "version": "0.2", "bind": f"{HOST}:{PORT}"})
+            _json(
+                self,
+                200,
+                {"ok": True, "service": "capital", "version": API_VERSION, "bind": f"{HOST}:{PORT}"},
+            )
             return
         if u.path == "/api/summary":
             today = date.today()
             dfrom = qs.get("from", [f"{today.year}-01-01"])[0]
             dto = qs.get("to", [today.isoformat()])[0]
             _json(self, 200, {"ok": True, "data": STORE.summary(dfrom, dto)})
+            return
+        if u.path == "/api/analytics/expenses":
+            today = date.today()
+            dfrom = qs.get("from", [f"{today.year}-{today.month:02d}-01"])[0]
+            dto = qs.get("to", [today.isoformat()])[0]
+            acc = qs.get("account_id", [None])[0]
+            data = ledger.expense_analytics(
+                STORE.list_kind("transaction"),
+                STORE.list_kind("category"),
+                dfrom,
+                dto,
+                account_id=acc or None,
+            )
+            _json(self, 200, {"ok": True, "data": data})
+            return
+        if u.path == "/api/import/batches":
+            _json(self, 200, {"ok": True, "data": STORE.list_kind("import_batch")})
             return
         if u.path == "/api/transactions":
             _json(self, 200, {"ok": True, "data": STORE.list_kind("transaction")})
@@ -453,6 +482,50 @@ class Handler(BaseHTTPRequestHandler):
                 _json(self, 200, {"ok": True, "data": saved})
                 return
 
+            if u.path == "/api/import/statement":
+                # Privacy: never log body text / file contents
+                account_id = body.get("account_id")
+                if not account_id:
+                    _json(self, 400, {"ok": False, "error": "account_id required"})
+                    return
+                try:
+                    text, source_label = decode_upload_payload(body)
+                except Exception as e:  # noqa: BLE001
+                    _json(self, 400, {"ok": False, "error": str(e)})
+                    return
+                currency = body.get("currency") or "RUB"
+                dry = bool(body.get("dry_run"))
+                plan = build_import_plan(STORE, account_id=account_id, text=text, currency=currency)
+                # drop heavy prepared payload from error responses
+                if not plan.get("ok"):
+                    safe = {k: v for k, v in plan.items() if not k.startswith("_")}
+                    _json(self, 400, {"ok": False, **safe})
+                    return
+                if dry:
+                    safe = {k: v for k, v in plan.items() if not k.startswith("_")}
+                    _json(self, 200, {"ok": True, "data": safe})
+                    return
+                result = execute_import(STORE, plan, source_label=source_label)
+                _json(self, 200, {"ok": True, "data": result})
+                return
+
+            if u.path == "/api/import/void":
+                saved = void_batch(STORE, body["batch_id"], body.get("reason") or "user void import")
+                _json(self, 200, {"ok": True, "data": saved})
+                return
+
+            if u.path == "/api/import/classify":
+                result = apply_classification_to_similar(
+                    STORE,
+                    fingerprints=body.get("fingerprints") or [],
+                    category_name=body["category_name"],
+                    economic_kind=body.get("economic_kind") or "purchase",
+                    ledger_type=body.get("ledger_type") or "expense",
+                    remember=body.get("remember"),
+                )
+                _json(self, 200, {"ok": True, "data": result})
+                return
+
             _json(self, 404, {"ok": False, "error": "not found"})
         except KeyError as e:
             _json(self, 400, {"ok": False, "error": f"missing field {e}"})
@@ -464,7 +537,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Capital API on http://{HOST}:{PORT}/  (local only, v0.2)", flush=True)
+    print(f"Capital API on http://{HOST}:{PORT}/  (local only, v{API_VERSION})", flush=True)
     httpd.serve_forever()
 
 
