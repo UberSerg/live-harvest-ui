@@ -14,6 +14,8 @@ UI = ROOT / "harvest-ui"
 OVERLAY = UI / "overlay.json"
 OUT_JSON = UI / "snapshot.json"
 OUT_JS = UI / "data.js"
+DEMO_JSON = UI / "demo" / "snapshot.demo.json"
+DEMO_JS = UI / "demo" / "data.demo.js"
 
 UNIVERSE_BASE = [
     {"id": "family", "label": "Семья", "angle": -90, "status": "empty", "blurb": "Нет свежего среза в UI."},
@@ -517,6 +519,16 @@ def write_js(data: dict) -> None:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build Live Harvest UI snapshot from harvest/")
+    parser.add_argument(
+        "--also-demo",
+        action="store_true",
+        help="FORBIDDEN for real personal data. Only for synthetic fixtures.",
+    )
+    args = parser.parse_args()
+
     data = build_literal()
     overlay = {}
     if OVERLAY.exists():
@@ -529,11 +541,23 @@ def main() -> None:
             {"title": "Live Harvest как ежедневный Life OS", "meta": "Продуктовый клин"},
             {"title": "Первый измеримый этап монетизации", "meta": "Открытый вопрос"},
         ]
+
+    # Private local UI files only — never overwrite public demo fixtures with harvest SoT.
     OUT_JSON.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     write_js(data)
     print(f"OK → {OUT_JSON.relative_to(ROOT)}")
     print(f"OK → {OUT_JS.relative_to(ROOT)}")
     print(f"clusters: {len(data['portrait']['clusters'])}, universe: {len(data['universe'])}")
+
+    if args.also_demo:
+        raise SystemExit(
+            "Refusing to write demo/: real harvest snapshot must not overwrite public demo fixtures. "
+            "Edit demo/snapshot.demo.json manually with synthetic data only."
+        )
+    # Safety: ensure we never touched demo outputs
+    for p in (DEMO_JSON, DEMO_JS):
+        if p.resolve() in {OUT_JSON.resolve(), OUT_JS.resolve()}:
+            raise SystemExit("refusing to overwrite demo snapshot path")
 
 
 if __name__ == "__main__":

@@ -17,4 +17,6 @@
 
 ## Генератор
 
-`tools/lh_ui_snapshot.py` не читает ledger Капитала и не пишет суммы в snapshot.
+`tools/lh_ui_snapshot.py` пишет только локальные `harvest-ui/snapshot.json` и `data.js`.  
+Флаг `--also-demo` **запрещён** для реальных данных: demo-фикстуры не перезаписываются harvest SoT.  
+Публичный репозиторий синхронизируется с `demo/snapshot.demo.json`, не с личным snapshot.
