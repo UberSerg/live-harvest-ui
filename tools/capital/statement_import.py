@@ -30,12 +30,16 @@ def build_import_plan(
         return {"ok": False, "error": "unknown_account"}
 
     parsed = statement_parse.parse_statement(text, currency=currency or acc.get("currency") or "RUB")
+    recon = parsed.get("reconciliation") or {}
+    bank_totals = parsed.get("bank_totals") or {}
     if parsed["count"] == 0:
         return {
             "ok": False,
             "error": "no_operations_parsed",
             "unrecognized_count": parsed.get("unrecognized_count", 0),
             "unrecognized_preview": (parsed.get("unrecognized_lines") or [])[:5],
+            "reconciliation": recon,
+            "bank_totals": bank_totals,
         }
 
     # Critical: too many orphan lines relative to ops → abort
@@ -46,6 +50,23 @@ def build_import_plan(
             "error": "parse_integrity_failed",
             "detail": f"unrecognized_lines={unrec} ops={parsed['count']}",
             "unrecognized_preview": (parsed.get("unrecognized_lines") or [])[:8],
+            "reconciliation": recon,
+            "bank_totals": bank_totals,
+        }
+
+    # Footer totals present but don't match parsed ops → stop package save
+    if recon.get("status") == "mismatch":
+        return {
+            "ok": False,
+            "error": "reconciliation_mismatch",
+            "detail": recon.get("message"),
+            "reconciliation": recon,
+            "bank_totals": bank_totals,
+            "parsed_count": parsed["count"],
+            "sum_in_minor": parsed.get("sum_in_minor"),
+            "sum_out_minor": parsed.get("sum_out_minor"),
+            "date_from": parsed.get("date_from"),
+            "date_to": parsed.get("date_to"),
         }
 
     rules = store.list_kind("classification_rule")
@@ -120,6 +141,8 @@ def build_import_plan(
         "sum_in_minor": parsed.get("sum_in_minor"),
         "sum_out_minor": parsed.get("sum_out_minor"),
         "unrecognized_count": unrec,
+        "bank_totals": bank_totals,
+        "reconciliation": recon,
         "_prepared": prepared,
         "_cats": to_create_cats,
     }
@@ -176,6 +199,8 @@ def execute_import(store: Any, plan: dict[str, Any], *, source_label: str = "pas
         saved = store.upsert("transaction", tx)
         created_txs.append(saved["id"])
 
+    recon = plan.get("reconciliation") or {}
+    bank_totals = plan.get("bank_totals") or {}
     batch = {
         "kind": "import_batch",
         "id": batch_id,
@@ -190,6 +215,12 @@ def execute_import(store: Any, plan: dict[str, Any], *, source_label: str = "pas
         "needs_review": plan.get("needs_review"),
         "categories_created": len(created_cats),
         "transaction_ids": created_txs,
+        "sum_in_minor": plan.get("sum_in_minor"),
+        "sum_out_minor": plan.get("sum_out_minor"),
+        "bank_total_in_minor": bank_totals.get("bank_total_in_minor"),
+        "bank_total_out_minor": bank_totals.get("bank_total_out_minor"),
+        "reconciliation_status": recon.get("status") or "no_totals",
+        "reconciliation_message": recon.get("message") or "",
         "status": "actual",
         "source": "bank_import",
         "privacy": "sensitive",
@@ -228,8 +259,89 @@ def execute_import(store: Any, plan: dict[str, Any], *, source_label: str = "pas
         "unrecognized_lines": plan.get("unrecognized_count"),
         "date_from": plan.get("date_from"),
         "date_to": plan.get("date_to"),
+        "sum_in_minor": plan.get("sum_in_minor"),
+        "sum_out_minor": plan.get("sum_out_minor"),
+        "reconciliation": recon,
         "harvester_queue": questions,
     }
+
+
+def repair_bank_import_metadata(store: Any) -> dict[str, Any]:
+    """
+    Fix existing bank_import txs: direction, economic defaults.
+    Does not invent balances or delete data. No raw statement required.
+    """
+    rules = store.list_kind("classification_rule")
+    updated = 0
+    for tx in store.list_kind("transaction"):
+        if tx.get("status") == "void":
+            continue
+        if tx.get("source") != "bank_import" and not tx.get("fingerprint"):
+            continue
+        changed = False
+        tx = dict(tx)
+        if not tx.get("direction"):
+            if tx.get("type") in ("income",):
+                tx["direction"] = "in"
+                changed = True
+            elif tx.get("type") in ("expense", "debt_interest", "debt_principal"):
+                tx["direction"] = "out"
+                changed = True
+        if not tx.get("economic_kind") or tx.get("classification_status") is None:
+            op = {
+                "bank_category": tx.get("bank_category") or "",
+                "description": tx.get("description") or tx.get("comment") or "",
+                "merchant": tx.get("merchant") or "",
+                "direction": tx.get("direction") or "out",
+            }
+            clf = statement_classify.apply_rules(op, rules)
+            for k in (
+                "economic_kind",
+                "classification_status",
+                "include_in_flows",
+                "classification_source",
+            ):
+                if tx.get(k) is None or (k == "economic_kind" and not tx.get(k)):
+                    tx[k] = clf[k]
+                    changed = True
+            if not tx.get("type") or tx.get("type") not in (
+                "income",
+                "expense",
+                "transfer",
+                "debt_principal",
+                "debt_interest",
+                "adjustment",
+            ):
+                tx["type"] = clf["ledger_type"]
+                changed = True
+        if changed:
+            store.upsert("transaction", tx)
+            updated += 1
+
+    # refresh batch reconcile status from stored op sums vs stored bank totals
+    batches_fixed = 0
+    for batch in store.list_kind("import_batch"):
+        if batch.get("status") == "void":
+            continue
+        ids = set(batch.get("transaction_ids") or [])
+        txs = [t for t in store.list_kind("transaction") if t.get("id") in ids and t.get("status") != "void"]
+        sum_in = sum(int(t["amount_minor"]) for t in txs if t.get("direction") == "in")
+        sum_out = sum(int(t["amount_minor"]) for t in txs if t.get("direction") == "out")
+        recon = statement_parse.reconcile_ops_to_totals(
+            sum_in,
+            sum_out,
+            batch.get("bank_total_in_minor"),
+            batch.get("bank_total_out_minor"),
+        )
+        batch = dict(batch)
+        batch["sum_in_minor"] = sum_in
+        batch["sum_out_minor"] = sum_out
+        batch["reconciliation_status"] = recon["status"]
+        batch["reconciliation_message"] = recon["message"]
+        store.upsert("import_batch", batch)
+        batches_fixed += 1
+
+    return {"ok": True, "transactions_updated": updated, "batches_refreshed": batches_fixed}
 
 
 def group_review_questions(prepared: list[dict]) -> list[dict]:

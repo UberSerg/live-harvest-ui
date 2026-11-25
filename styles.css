@@ -394,6 +394,20 @@ a{color:inherit}
   color:var(--accent);font:500 13px/1 var(--mono);
 }
 .cap-form button:hover{background:var(--accent-soft)}
+.cap-recon{
+  margin:0;padding:10px 14px;border-radius:8px;border:1px solid var(--line-soft);
+  font:500 13px/1.4 var(--mono);color:var(--muted);
+}
+.cap-recon.is-ok{border-color:rgba(92,184,138,.45);color:var(--life)}
+.cap-recon.is-err{border-color:rgba(212,138,120,.55);color:var(--open)}
+.cap-recon.is-warn{border-color:rgba(203,180,106,.45);color:var(--hypo)}
+.cap-econ-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:6px}
+.cap-econ-list li{
+  display:flex;justify-content:space-between;gap:12px;
+  padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px;cursor:pointer;
+}
+.cap-econ-list li:hover,.cap-click{cursor:pointer}
+.cap-click:hover .cap-num,.cap-kpi.cap-click:hover .section-label{color:var(--accent)}
 .cap-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .cap-preset{
   padding:6px 10px;border-radius:6px;border:1px solid var(--line-soft);

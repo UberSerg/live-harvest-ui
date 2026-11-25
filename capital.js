@@ -411,6 +411,9 @@
   function viewOverview(s) {
     const nw = s.net_worth || {};
     const flows = s.flows || {};
+    const bank = s.bank_turnover || {};
+    const economic = s.economic || {};
+    const recon = s.reconciliation || {};
     const monthlyPlan = s.recurring_monthly || {};
     const periodPlan = s.planned_combined || {};
     const budget = s.budget || {};
@@ -421,16 +424,15 @@
     if (budget.unfilled_budget_lines?.length)
       incomplete.push("не заполнены: " + budget.unfilled_budget_lines.join(", "));
     const debtIcon = `<span class="cap-debt-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9.5 12.5l1.8 1.8 3.7-3.8"/></svg></span>`;
-    const savRatio =
-      monthlyPlan.income_minor > 0 && budget.savings_plan_minor != null
-        ? Math.round((budget.savings_plan_minor / monthlyPlan.income_minor) * 100)
-        : null;
+    const reconClass =
+      recon.status === "matched" ? "is-ok" : recon.status === "mismatch" ? "is-err" : "is-warn";
+    const buckets = economic.buckets || [];
     return `
       <section class="cap-hero">
         <div>
           <p class="cap-hero-kicker">Курс на независимость</p>
           <h2 class="cap-hero-title">Каждый месяц усиливает свободу</h2>
-          <p class="cap-hero-lead">Факт отдельно от плана. Неизвестный остаток не равен нулю. Долг учтён, но не доминирует.</p>
+          <p class="cap-hero-lead">Банковский оборот и экономическая аналитика разделены. Неизвестный остаток не равен нулю.</p>
         </div>
         <div class="cap-hero-stat">
           <p class="section-label">Чистый капитал</p>
@@ -438,27 +440,76 @@
           <p class="cap-sub">${nw.complete ? "полный срез" : "есть пробелы данных"}</p>
         </div>
       </section>
-      <section class="cap-pos">
-        <div class="cap-kpi is-positive">
-          <p class="section-label">Ликвидность</p>
-          <p class="cap-num">${esc(fmt(nw.liquid_minor))}</p>
-          <p class="cap-sub">${nw.liquid_complete ? "известные счета" : "неполная"}</p>
-        </div>
-        <div class="cap-kpi">
-          <p class="section-label">Факт-поток периода</p>
-          <p class="cap-num">${esc(fmt(flows.net_cashflow_minor))}</p>
-          <p class="cap-sub">доход ${esc(fmt(flows.income_minor))} · расход ${esc(fmt(flows.expense_minor))}</p>
-        </div>
-        <div class="cap-kpi is-positive">
-          <p class="section-label">План-поток / мес</p>
-          <p class="cap-num">${esc(fmt(monthlyPlan.net_cashflow_minor))}</p>
-          <p class="cap-sub">шаблоны · период план ${esc(fmt(periodPlan.net_cashflow_minor))}</p>
-        </div>
-        <div class="cap-kpi">
-          <p class="section-label">План накоплений</p>
-          <p class="cap-num">${esc(fmt(budget.savings_plan_minor))}</p>
-          <p class="cap-sub">${savRatio != null ? savRatio + "% дохода в плане" : "доля не считается — пробелы бюджета"}</p>
-        </div>
+      <p class="cap-recon ${reconClass}" id="capRecon">${esc(recon.message || "Итоги выписки отсутствуют")}</p>
+      <section>
+        <p class="section-label">Банковский оборот периода</p>
+        <section class="cap-pos">
+          <div class="cap-kpi is-positive cap-click" data-drill="bank_in">
+            <p class="section-label">Поступления</p>
+            <p class="cap-num">${esc(fmt(bank.inflow_minor))}</p>
+            <p class="cap-sub">${esc(bank.count_in || 0)} операций · нажми для списка</p>
+          </div>
+          <div class="cap-kpi cap-click" data-drill="bank_out">
+            <p class="section-label">Списания</p>
+            <p class="cap-num">${esc(fmt(bank.outflow_minor))}</p>
+            <p class="cap-sub">${esc(bank.count_out || 0)} операций · нажми для списка</p>
+          </div>
+          <div class="cap-kpi is-positive">
+            <p class="section-label">Чистое движение</p>
+            <p class="cap-num">${esc(fmt(bank.net_minor))}</p>
+            <p class="cap-sub">все actual, без фильтра классификации</p>
+          </div>
+          <div class="cap-kpi">
+            <p class="section-label">Ликвидность</p>
+            <p class="cap-num">${esc(fmt(nw.liquid_minor))}</p>
+            <p class="cap-sub">${nw.liquid_complete ? "известные счета" : "неполная"}</p>
+          </div>
+        </section>
+      </section>
+      <section>
+        <p class="section-label">Экономическая аналитика</p>
+        <section class="cap-pos">
+          <div class="cap-kpi is-positive">
+            <p class="section-label">Факт-доходы</p>
+            <p class="cap-num">${esc(fmt(flows.income_minor))}</p>
+            <p class="cap-sub">подтверждённые · не весь оборот</p>
+          </div>
+          <div class="cap-kpi">
+            <p class="section-label">Факт-расходы</p>
+            <p class="cap-num">${esc(fmt(flows.expense_minor))}</p>
+            <p class="cap-sub">потребительские / подтверждённые</p>
+          </div>
+          <div class="cap-kpi">
+            <p class="section-label">Экон. поток</p>
+            <p class="cap-num">${esc(fmt(flows.net_cashflow_minor))}</p>
+            <p class="cap-sub">исключены переводы и needs_review</p>
+          </div>
+          <div class="cap-kpi is-positive">
+            <p class="section-label">План / мес</p>
+            <p class="cap-num">${esc(fmt(monthlyPlan.net_cashflow_minor))}</p>
+            <p class="cap-sub">шаблоны · период ${esc(fmt(periodPlan.net_cashflow_minor))}</p>
+          </div>
+        </section>
+        <ul class="cap-econ-list" id="capEconList">
+          ${buckets
+            .map(
+              (b) =>
+                `<li class="cap-click" data-econ="${esc(b.id)}"><span>${esc(b.label)} · ${esc(b.count)}</span><span>${esc(
+                  fmt(b.amount_minor)
+                )}</span></li>`
+            )
+            .join("") || "<li><span>Нет движений за период</span><span></span></li>"}
+        </ul>
+        <p class="cap-sub">Сумма типов ${
+          economic.matches_bank_in && economic.matches_bank_out
+            ? "сходится с банковским оборотом"
+            : "⚠ не сходится с оборотом (δ in " +
+              fmt(economic.delta_in_minor) +
+              " / out " +
+              fmt(economic.delta_out_minor) +
+              ")"
+        }</p>
+        <div id="capEconDrill" class="cap-drill is-hidden"></div>
       </section>
       ${
         incomplete.length
@@ -490,8 +541,10 @@
           </div>
         </div>
         <div>
-          <p class="section-label">Категории</p>
+          <p class="section-label">Категории (экон. расходы)</p>
           <ul class="cap-legend" id="capExpLegend"></ul>
+          <p class="section-label" style="margin-top:14px">Вне графика</p>
+          <ul class="soft-list" id="capExpExcluded"></ul>
           <div id="capExpDrill" class="cap-drill is-hidden"></div>
         </div>
       </section>
@@ -1362,6 +1415,22 @@
   const DONUT_COLORS = ["#c9a27a", "#5cb88a", "#7eb6d9", "#d48a78", "#9a9aa3", "#cbb46a", "#8a7ec8", "#6aa8a1", "#c47a9a", "#a3b56e"];
 
   function bindOverviewExtras(s) {
+    const bank = s.bank_turnover || {};
+    const economic = s.economic || {};
+    document.querySelectorAll("[data-drill]").forEach((el) => {
+      el.onclick = () => {
+        const kind = el.getAttribute("data-drill");
+        const ops = kind === "bank_in" ? bank.operations_in : bank.operations_out;
+        showOpDrill(ops, kind === "bank_in" ? "Поступления" : "Списания");
+      };
+    });
+    document.querySelectorAll("[data-econ]").forEach((el) => {
+      el.onclick = () => {
+        const id = el.getAttribute("data-econ");
+        const b = (economic.buckets || []).find((x) => x.id === id);
+        if (b) showOpDrill(b.operations, b.label);
+      };
+    });
     const review = s.needs_review || [];
     const ul = document.getElementById("capReviewList");
     if (ul) {
@@ -1505,6 +1574,19 @@
     if (!ctx2) return;
     const segments = ea.segments || [];
     if (totalEl) totalEl.textContent = fmt(ea.total_expense_minor || 0);
+    const excl = document.getElementById("capExpExcluded");
+    if (excl) {
+      const rows = ea.excluded || [];
+      excl.innerHTML = rows.length
+        ? rows
+            .map(
+              (r) =>
+                `<li><span>${esc(r.label)} · ${esc(r.count)}</span><span>${esc(fmt(r.amount_minor))}</span></li>`
+            )
+            .join("") +
+          `<li><span>Банковские списания всего</span><span>${esc(fmt(ea.bank_outflow_minor))}</span></li>`
+        : `<li><span>Все списания в графике</span><span>${esc(fmt(ea.bank_outflow_minor))}</span></li>`;
+    }
     if (!segments.length) {
       if (legend) legend.innerHTML = "<li>Нет подтверждённых расходов за период</li>";
       return;
@@ -1569,6 +1651,23 @@
             `<li><span>${esc(o.date)} · ${esc(o.merchant)}</span><span>${esc(fmt(o.amount_minor))}</span></li>`
         )
         .join("")}</ul>`;
+  }
+
+  function showOpDrill(ops, title) {
+    const host = document.getElementById("capEconDrill") || document.getElementById("capExpDrill");
+    if (!host) return;
+    host.classList.remove("is-hidden");
+    host.innerHTML = `
+      <p class="section-label">${esc(title)}</p>
+      <ul class="soft-list">${(ops || [])
+        .slice(0, 40)
+        .map(
+          (o) =>
+            `<li><span>${esc(o.date)} · ${esc(o.merchant || o.economic_kind || "")}</span><span>${esc(
+              fmt(o.amount_minor)
+            )}</span></li>`
+        )
+        .join("") || "<li><span>Пусто</span><span></span></li>"}</ul>`;
   }
 
   function renderAssetChart(s) {

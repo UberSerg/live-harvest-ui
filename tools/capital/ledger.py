@@ -375,6 +375,213 @@ def expense_by_category(transactions: list[dict], date_from: str, date_to: str) 
     return dict(out)
 
 
+def _tx_direction(tx: dict) -> str | None:
+    d = tx.get("direction")
+    if d in ("in", "out"):
+        return d
+    t = tx.get("type")
+    if t in TX_IN:
+        return "in"
+    if t in TX_OUT or t in TX_PRINCIPAL:
+        return "out"
+    if t in TX_TRANSFER:
+        return "out"  # outflow leg from account_id
+    if t == "adjustment":
+        amt = int(tx.get("amount_minor") or 0)
+        return "in" if amt >= 0 else "out"
+    return None
+
+
+def bank_turnover(
+    transactions: list[dict],
+    date_from: str,
+    date_to: str,
+    *,
+    account_id: str | None = None,
+) -> dict[str, Any]:
+    """All actual cash movements by bank direction — independent of economic classification."""
+    inflow = 0
+    outflow = 0
+    n_in = 0
+    n_out = 0
+    ops_in: list[dict] = []
+    ops_out: list[dict] = []
+    for tx in transactions:
+        if tx.get("status") != "actual":
+            continue
+        d = tx.get("date") or ""
+        if d < date_from or d > date_to:
+            continue
+        if account_id and tx.get("account_id") != account_id:
+            # transfers into account via counterparty
+            if not (tx.get("type") == "transfer" and tx.get("counterparty_account_id") == account_id):
+                continue
+            direction = "in"
+            amt = abs(int(tx["amount_minor"]))
+        else:
+            direction = _tx_direction(tx)
+            if direction is None:
+                continue
+            amt = abs(int(tx["amount_minor"]))
+        row = {
+            "id": tx.get("id"),
+            "date": d,
+            "amount_minor": amt,
+            "direction": direction,
+            "economic_kind": tx.get("economic_kind") or "undefined",
+            "merchant": tx.get("merchant") or tx.get("bank_category") or "",
+            "classification_status": tx.get("classification_status") or "confirmed",
+        }
+        if direction == "in":
+            inflow += amt
+            n_in += 1
+            ops_in.append(row)
+        else:
+            outflow += amt
+            n_out += 1
+            ops_out.append(row)
+    return {
+        "inflow_minor": inflow,
+        "outflow_minor": outflow,
+        "net_minor": inflow - outflow,
+        "count_in": n_in,
+        "count_out": n_out,
+        "count": n_in + n_out,
+        "operations_in": sorted(ops_in, key=lambda x: x["date"], reverse=True)[:200],
+        "operations_out": sorted(ops_out, key=lambda x: x["date"], reverse=True)[:200],
+        "period": {"from": date_from, "to": date_to},
+        "note": "банковский оборот: все actual-движения, без фильтра классификации",
+    }
+
+
+def _economic_bucket(tx: dict, direction: str) -> str:
+    ek = tx.get("economic_kind") or ""
+    status = tx.get("classification_status")
+    if status == "needs_review" or ek in ("", "undefined"):
+        return "unclassified_in" if direction == "in" else "unclassified_out"
+    mapping = {
+        "salary": "income_salary",
+        "other_income": "income_other",
+        "cashback": "income_cashback",
+        "bank_interest": "income_interest",
+        "refund": "income_refund",
+        "cash_deposit": "income_cash",
+        "purchase": "expense_purchase",
+        "bank_fee": "expense_fee",
+        "mortgage": "expense_mortgage",
+        "atm_withdraw": "expense_atm",
+        "debt_principal": "debt_principal",
+        "debt_interest": "expense_fee",
+        "transfer_internal": "transfer_internal",
+        "transfer_other": "transfer_other",
+        "investment_funding": "investment",
+    }
+    if ek in mapping:
+        return mapping[ek]
+    # fallback by ledger type
+    if direction == "in":
+        return "income_other" if status == "confirmed" else "unclassified_in"
+    return "expense_purchase" if status == "confirmed" else "unclassified_out"
+
+
+BUCKET_LABELS = {
+    "income_salary": "Зарплата",
+    "income_other": "Дополнительные доходы",
+    "income_cashback": "Кешбэк",
+    "income_interest": "Банковские проценты",
+    "income_refund": "Возвраты",
+    "income_cash": "Пополнение наличными",
+    "expense_purchase": "Покупки / расходы",
+    "expense_fee": "Банковские комиссии",
+    "expense_mortgage": "Ипотечные платежи",
+    "expense_atm": "Снятие наличных",
+    "debt_principal": "Погашение тела долга",
+    "transfer_internal": "Внутренние переводы",
+    "transfer_other": "Переводы другим людям",
+    "investment": "Инвестиционные операции",
+    "unclassified_in": "Неклассифицированные поступления",
+    "unclassified_out": "Неклассифицированные списания",
+}
+
+
+def economic_breakdown(
+    transactions: list[dict],
+    date_from: str,
+    date_to: str,
+    *,
+    account_id: str | None = None,
+) -> dict[str, Any]:
+    """Partition every bank movement into economic buckets; sums must equal bank turnover."""
+    buckets: dict[str, dict[str, Any]] = {}
+    for tx in transactions:
+        if tx.get("status") != "actual":
+            continue
+        d = tx.get("date") or ""
+        if d < date_from or d > date_to:
+            continue
+        if account_id and tx.get("account_id") != account_id:
+            if not (tx.get("type") == "transfer" and tx.get("counterparty_account_id") == account_id):
+                continue
+            direction = "in"
+        else:
+            direction = _tx_direction(tx)
+            if direction is None:
+                continue
+        amt = abs(int(tx["amount_minor"]))
+        key = _economic_bucket(tx, direction)
+        b = buckets.setdefault(
+            key,
+            {
+                "id": key,
+                "label": BUCKET_LABELS.get(key, key),
+                "direction": "in" if key.endswith("_in") or key.startswith("income_") else (
+                    "out" if key.startswith("expense_") or key in ("debt_principal", "transfer_internal", "transfer_other", "investment", "unclassified_out") else "mixed"
+                ),
+                "amount_minor": 0,
+                "count": 0,
+                "operations": [],
+            },
+        )
+        # fix direction for income_* / expense_*
+        if key.startswith("income_") or key == "unclassified_in":
+            b["direction"] = "in"
+        elif key.startswith("expense_") or key in (
+            "debt_principal",
+            "transfer_internal",
+            "transfer_other",
+            "investment",
+            "unclassified_out",
+        ):
+            b["direction"] = "out"
+        b["amount_minor"] += amt
+        b["count"] += 1
+        if len(b["operations"]) < 100:
+            b["operations"].append(
+                {
+                    "id": tx.get("id"),
+                    "date": d,
+                    "amount_minor": amt,
+                    "merchant": tx.get("merchant") or tx.get("bank_category") or "",
+                    "economic_kind": tx.get("economic_kind"),
+                    "classification_status": tx.get("classification_status"),
+                }
+            )
+
+    sum_in = sum(b["amount_minor"] for b in buckets.values() if b["direction"] == "in")
+    sum_out = sum(b["amount_minor"] for b in buckets.values() if b["direction"] == "out")
+    turnover = bank_turnover(transactions, date_from, date_to, account_id=account_id)
+    return {
+        "buckets": sorted(buckets.values(), key=lambda x: (-x["amount_minor"], x["id"])),
+        "sum_in_minor": sum_in,
+        "sum_out_minor": sum_out,
+        "matches_bank_in": sum_in == turnover["inflow_minor"],
+        "matches_bank_out": sum_out == turnover["outflow_minor"],
+        "delta_in_minor": sum_in - turnover["inflow_minor"],
+        "delta_out_minor": sum_out - turnover["outflow_minor"],
+        "period": {"from": date_from, "to": date_to},
+    }
+
+
 def expense_analytics(
     transactions: list[dict],
     categories: list[dict],
@@ -383,24 +590,57 @@ def expense_analytics(
     *,
     account_id: str | None = None,
 ) -> dict[str, Any]:
-    """Doughnut-ready expense breakdown + top merchants (consumer confirmed only)."""
+    """Doughnut-ready economic expense breakdown (not full bank outflow)."""
     cat_name = {c["id"]: c["name"] for c in categories}
     by_cat: dict[str, int] = defaultdict(int)
     by_merchant: dict[str, int] = defaultdict(int)
     ops_by_cat: dict[str, list[dict]] = defaultdict(list)
     largest = []
+    excluded: dict[str, dict[str, Any]] = {}
+    bank_out = 0
     for tx in transactions:
-        if not _ok(tx) or tx.get("type") not in TX_OUT:
-            continue
-        if not _counts_in_flows(tx):
-            continue
-        if account_id and tx.get("account_id") != account_id:
+        if tx.get("status") != "actual":
             continue
         d = tx.get("date") or ""
         if d < date_from or d > date_to:
             continue
+        if account_id and tx.get("account_id") != account_id:
+            continue
+        direction = _tx_direction(tx)
+        if direction != "out":
+            continue
+        amt = abs(int(tx["amount_minor"]))
+        bank_out += amt
+        # include in doughnut?
+        if tx.get("type") not in TX_OUT and tx.get("type") not in TX_PRINCIPAL:
+            # transfers etc.
+            reason = "transfer_or_non_expense_type"
+            ex = excluded.setdefault(reason, {"reason": reason, "label": "Переводы / не расход", "amount_minor": 0, "count": 0})
+            ex["amount_minor"] += amt
+            ex["count"] += 1
+            continue
+        if not _counts_in_flows(tx):
+            ek = tx.get("economic_kind") or "undefined"
+            if tx.get("classification_status") == "needs_review" or ek == "undefined":
+                reason = "unclassified"
+                label = "Неклассифицированные списания"
+            elif ek in ("transfer_internal", "transfer_other"):
+                reason = "transfers"
+                label = "Переводы"
+            elif ek == "investment_funding":
+                reason = "investment"
+                label = "Инвестиции"
+            elif ek == "debt_principal" or tx.get("type") in TX_PRINCIPAL:
+                reason = "debt_principal"
+                label = "Погашение тела долга"
+            else:
+                reason = "excluded_other"
+                label = "Прочие исключения из doughnut"
+            ex = excluded.setdefault(reason, {"reason": reason, "label": label, "amount_minor": 0, "count": 0})
+            ex["amount_minor"] += amt
+            ex["count"] += 1
+            continue
         cid = tx.get("category_id") or "uncategorized"
-        amt = int(tx["amount_minor"])
         by_cat[cid] += amt
         merch = tx.get("merchant") or "—"
         by_merchant[merch] += amt
@@ -434,6 +674,7 @@ def expense_analytics(
                 "operations": sorted(ops_by_cat[cid], key=lambda x: x["date"], reverse=True),
             }
         )
+    excluded_total = sum(x["amount_minor"] for x in excluded.values())
     needs = [
         t
         for t in transactions
@@ -444,6 +685,9 @@ def expense_analytics(
     ]
     return {
         "total_expense_minor": total,
+        "bank_outflow_minor": bank_out,
+        "excluded_from_chart_minor": excluded_total,
+        "excluded": sorted(excluded.values(), key=lambda x: -x["amount_minor"]),
         "segments": segments,
         "top_merchants": sorted(
             [{"merchant": k, "amount_minor": v} for k, v in by_merchant.items()],
@@ -452,6 +696,7 @@ def expense_analytics(
         "largest_purchases": sorted(largest, key=lambda x: -x["amount_minor"])[:15],
         "needs_review_count": len(needs),
         "period": {"from": date_from, "to": date_to},
+        "note": "doughnut = экономические расходы; списания вне графика перечислены в excluded",
     }
 
 

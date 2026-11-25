@@ -35,6 +35,22 @@ HEADER_NOISE = {
     "и код авторизации1",
 }
 
+# Footer totals (T-Bank-like and close variants)
+TOTAL_IN_RE = re.compile(
+    r"(?:^|\b)(?:пополнение|поступления|всего\s+пополнен\w*|итого\s+пополнен\w*)\s*:?\s*\+?\s*"
+    r"([+-]?(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})",
+    re.IGNORECASE,
+)
+TOTAL_OUT_RE = re.compile(
+    r"(?:^|\b)(?:списание|списания|всего\s+списан\w*|итого\s+списан\w*|расход(?:ы)?)\s*:?\s*\+?\s*"
+    r"([+-]?(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})",
+    re.IGNORECASE,
+)
+TOTAL_LINE_RE = re.compile(
+    r"^(?:пополнение|поступления|списание|списания|всего\s+пополнен|всего\s+списан|итого\s+пополнен|итого\s+списан)",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ParsedOp:
@@ -103,6 +119,9 @@ def _is_noise(line: str) -> bool:
         return True
     if re.fullmatch(r"Страница\s+\d+\s+из\s+\d+", line, re.I):
         return True
+    if TOTAL_LINE_RE.match(line):
+        # keep out of op stream; extracted separately
+        return True
     return False
 
 
@@ -113,6 +132,77 @@ def strip_service_blocks(text: str) -> list[str]:
             continue
         out.append(line)
     return out
+
+
+def extract_bank_totals(text: str) -> dict[str, Any]:
+    """Pull statement footer totals. Last matching value wins (final page)."""
+    tot_in = None
+    tot_out = None
+    in_line = None
+    out_line = None
+    for line in normalize_text(text).split("\n"):
+        if not line:
+            continue
+        low = line.lower()
+        is_in = bool(re.search(r"пополнен|поступлен", low))
+        is_out = bool(re.search(r"списан", low)) and not is_in
+        if not is_in and not is_out:
+            continue
+        m = re.search(r"([+-]?(?:\d{1,3}(?:\s\d{3})*|\d+),\d{2})", line)
+        if not m:
+            continue
+        try:
+            amt, _dir = parse_amount_to_minor(m.group(1))
+        except ValueError:
+            continue
+        if is_in:
+            tot_in = amt
+            in_line = line[:100]
+        elif is_out:
+            tot_out = amt
+            out_line = line[:100]
+    return {
+        "bank_total_in_minor": tot_in,
+        "bank_total_out_minor": tot_out,
+        "has_totals": tot_in is not None or tot_out is not None,
+        "total_in_line": in_line,
+        "total_out_line": out_line,
+    }
+
+
+def reconcile_ops_to_totals(
+    sum_in_minor: int,
+    sum_out_minor: int,
+    bank_total_in_minor: int | None,
+    bank_total_out_minor: int | None,
+) -> dict[str, Any]:
+    """Compare parsed op sums to statement footer — must match to the kopeck."""
+    if bank_total_in_minor is None and bank_total_out_minor is None:
+        return {
+            "status": "no_totals",
+            "matched": None,
+            "delta_in_minor": None,
+            "delta_out_minor": None,
+            "message": "Итоги выписки отсутствуют",
+        }
+    delta_in = None if bank_total_in_minor is None else int(sum_in_minor) - int(bank_total_in_minor)
+    delta_out = None if bank_total_out_minor is None else int(sum_out_minor) - int(bank_total_out_minor)
+    ok_in = delta_in is None or delta_in == 0
+    ok_out = delta_out is None or delta_out == 0
+    matched = ok_in and ok_out
+    reasons = []
+    if not ok_in:
+        reasons.append(f"пополнение: parsed−bank={delta_in}")
+    if not ok_out:
+        reasons.append(f"списание: parsed−bank={delta_out}")
+    return {
+        "status": "matched" if matched else "mismatch",
+        "matched": matched,
+        "delta_in_minor": delta_in,
+        "delta_out_minor": delta_out,
+        "message": "Сверено до копейки" if matched else ("Обнаружено расхождение: " + "; ".join(reasons)),
+        "reasons": reasons,
+    }
 
 
 def parse_amount_to_minor(token: str) -> tuple[int, str]:
@@ -222,7 +312,15 @@ def parse_statement(text: str, *, currency: str = "RUB") -> dict[str, Any]:
         )
         i = j
 
-    # critical integrity: optional footer totals not required; return counts
+    sum_in = sum(o.amount_minor for o in ops if o.direction == "in")
+    sum_out = sum(o.amount_minor for o in ops if o.direction == "out")
+    totals = extract_bank_totals(text)
+    recon = reconcile_ops_to_totals(
+        sum_in,
+        sum_out,
+        totals.get("bank_total_in_minor"),
+        totals.get("bank_total_out_minor"),
+    )
     return {
         "ok": True,
         "operations": [asdict(o) for o in ops],
@@ -231,8 +329,10 @@ def parse_statement(text: str, *, currency: str = "RUB") -> dict[str, Any]:
         "unrecognized_count": len(unrecognized),
         "date_from": min((o.operation_date for o in ops), default=None),
         "date_to": max((o.operation_date for o in ops), default=None),
-        "sum_in_minor": sum(o.amount_minor for o in ops if o.direction == "in"),
-        "sum_out_minor": sum(o.amount_minor for o in ops if o.direction == "out"),
+        "sum_in_minor": sum_in,
+        "sum_out_minor": sum_out,
+        "bank_totals": totals,
+        "reconciliation": recon,
     }
 
 

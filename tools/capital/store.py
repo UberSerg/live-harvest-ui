@@ -498,7 +498,10 @@ class CapitalStore:
 
         bals = ledger.account_balances(accounts_all, txs, as_of=as_of, include_archived=False)
         lia_map = ledger.liability_principals(liabilities, txs, as_of=as_of)
-        flows = ledger.period_flows(txs, date_from, date_to)
+        # economic consumer flows (not full bank turnover)
+        flows = ledger.period_flows(txs, date_from, date_to, consumer_only=True)
+        bank_turnover = ledger.bank_turnover(txs, date_from, date_to)
+        economic = ledger.economic_breakdown(txs, date_from, date_to)
         planned_flows = ledger.period_flows(txs, date_from, date_to, statuses={"planned"})
         planned_combined = ledger.planned_without_double_count(txs, recurring, date_from, date_to)
         recurring_month = ledger.recurring_monthly_net(recurring)
@@ -512,6 +515,24 @@ class CapitalStore:
         series_planned = ledger.monthly_series(txs, months, statuses={"planned"})
         budget = ledger.budget_view(txs, recurring, categories, date_from, date_to)
         batches = [b for b in self.list_kind("import_batch") if b.get("status") != "void"]
+        batches_sorted = sorted(batches, key=lambda x: x.get("imported_at") or "", reverse=True)
+        # Aggregate reconciliation status for UI period (from batches overlapping period)
+        recon_statuses = []
+        for b in batches_sorted:
+            bf, bt = b.get("date_from") or "", b.get("date_to") or ""
+            if bf and bt and (bt < date_from or bf > date_to):
+                continue
+            recon_statuses.append(b.get("reconciliation_status") or "no_totals")
+        if any(s == "mismatch" for s in recon_statuses):
+            ui_recon = {"status": "mismatch", "message": "Обнаружено расхождение"}
+        elif recon_statuses and all(s == "matched" for s in recon_statuses):
+            ui_recon = {"status": "matched", "message": "Сверено до копейки"}
+        elif recon_statuses and any(s == "matched" for s in recon_statuses):
+            ui_recon = {"status": "matched", "message": "Сверено до копейки (по доступным итогам)"}
+        elif not recon_statuses:
+            ui_recon = {"status": "no_totals", "message": "Итоги выписки отсутствуют"}
+        else:
+            ui_recon = {"status": "no_totals", "message": "Итоги выписки отсутствуют"}
         review_ops = [
             t
             for t in txs
@@ -545,6 +566,9 @@ class CapitalStore:
             "balances": balances_ui,
             "balances_meta": balances_meta,
             "flows": flows,
+            "bank_turnover": bank_turnover,
+            "economic": economic,
+            "reconciliation": ui_recon,
             "planned_flows": planned_flows,
             "planned_combined": planned_combined,
             "recurring": recurring,

@@ -9,7 +9,12 @@ from pathlib import Path
 
 from tools.capital import statement_parse
 from tools.capital.gen_synthetic_statement import build
-from tools.capital.statement_import import build_import_plan, execute_import, void_batch
+from tools.capital.statement_import import (
+    build_import_plan,
+    execute_import,
+    repair_bank_import_metadata,
+    void_batch,
+)
 from tools.capital.store import CapitalStore
 
 SAMPLE = """ДАТА ОПЕРАЦИИ (МСК)
@@ -36,7 +41,11 @@ SAMPLE = """ДАТА ОПЕРАЦИИ (МСК)
 операции2
 13.11.2026 15:31 Прочие операции +150 000,55
 13.11.2026 345678 DEMO PAYMENT
+Пополнение +150 000,55
+Списание 1 600,00
 """
+
+SAMPLE_MISMATCH = SAMPLE.replace("Списание 1 600,00", "Списание 1 999,00")
 
 
 class ParseTests(unittest.TestCase):
@@ -49,6 +58,9 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(ops[0]["bank_category"], "Супермаркеты")
         self.assertEqual(ops[2]["direction"], "in")
         self.assertEqual(ops[2]["amount_minor"], 15000055)
+        self.assertEqual(r["reconciliation"]["status"], "matched")
+        self.assertEqual(r["bank_totals"]["bank_total_in_minor"], 15000055)
+        self.assertEqual(r["bank_totals"]["bank_total_out_minor"], 160000)
 
     def test_page_break_mid_op(self):
         text = """01.10.2026 12:00 Супермаркеты 100,00
@@ -76,6 +88,9 @@ PART TWO OF DESC
         r = statement_parse.parse_statement(text)
         self.assertGreaterEqual(r["count"], 300)
         self.assertLess(r["unrecognized_count"], r["count"] // 10)
+        self.assertEqual(r["reconciliation"]["status"], "matched")
+        self.assertEqual(r["sum_in_minor"], r["bank_totals"]["bank_total_in_minor"])
+        self.assertEqual(r["sum_out_minor"], r["bank_totals"]["bank_total_out_minor"])
 
 
 class ImportStoreTests(unittest.TestCase):
@@ -117,17 +132,49 @@ class ImportStoreTests(unittest.TestCase):
         active = [t for t in self.store.list_kind("transaction") if t.get("status") != "void"]
         self.assertEqual(len(active), 0)
 
-    def test_flows_exclude_needs_review(self):
+    def test_flows_exclude_needs_review_but_bank_includes(self):
         plan = build_import_plan(self.store, account_id=self.acc["id"], text=SAMPLE)
+        self.assertTrue(plan["ok"], plan)
+        self.assertEqual(plan["reconciliation"]["status"], "matched")
         execute_import(self.store, plan)
         s = self.store.summary("2026-11-01", "2026-11-30")
-        # 1250 + 350 = 1600 rub = 160000 minor confirmed expenses
+        # economic: 1250 + 350 confirmed expenses; income review excluded
         self.assertEqual(s["flows"]["expense_minor"], 160000)
-        # +150000.55 income is needs_review (Прочие) → excluded
         self.assertEqual(s["flows"]["income_minor"], 0)
+        # bank turnover includes everything
+        self.assertEqual(s["bank_turnover"]["outflow_minor"], 160000)
+        self.assertEqual(s["bank_turnover"]["inflow_minor"], 15000055)
+        self.assertTrue(s["economic"]["matches_bank_in"])
+        self.assertTrue(s["economic"]["matches_bank_out"])
         ea = s["expense_analytics"]
         self.assertEqual(ea["total_expense_minor"], 160000)
+        self.assertEqual(ea["bank_outflow_minor"], 160000)
         self.assertTrue(any(seg["name"] == "Продукты" for seg in ea["segments"]))
+        self.assertEqual(s["reconciliation"]["status"], "matched")
+
+    def test_mismatch_stops_import(self):
+        plan = build_import_plan(self.store, account_id=self.acc["id"], text=SAMPLE_MISMATCH)
+        self.assertFalse(plan["ok"])
+        self.assertEqual(plan["error"], "reconciliation_mismatch")
+
+    def test_repair_and_synthetic_reconcile(self):
+        text = build(2)
+        r = statement_parse.parse_statement(text)
+        self.assertEqual(r["reconciliation"]["status"], "matched")
+        plan = build_import_plan(self.store, account_id=self.acc["id"], text=text)
+        self.assertTrue(plan["ok"], plan.get("detail") or plan)
+        execute_import(self.store, plan)
+        # wipe direction to simulate old data
+        for t in self.store.list_kind("transaction"):
+            if t.get("source") == "bank_import":
+                t = dict(t)
+                t.pop("direction", None)
+                self.store.upsert("transaction", t)
+        rep = repair_bank_import_metadata(self.store)
+        self.assertGreaterEqual(rep["transactions_updated"], 1)
+        s = self.store.summary(plan["date_from"], plan["date_to"])
+        self.assertTrue(s["economic"]["matches_bank_in"])
+        self.assertTrue(s["economic"]["matches_bank_out"])
 
     def test_unknown_balance_not_invented(self):
         plan = build_import_plan(self.store, account_id=self.acc["id"], text=SAMPLE)

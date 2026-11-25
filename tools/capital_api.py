@@ -20,6 +20,7 @@ from tools.capital.statement_import import (  # noqa: E402
     build_import_plan,
     decode_upload_payload,
     execute_import,
+    repair_bank_import_metadata,
     void_batch,
 )
 from tools.capital.store import CapitalStore  # noqa: E402
@@ -27,7 +28,7 @@ from tools.capital.store import CapitalStore  # noqa: E402
 HOST = "127.0.0.1"
 PORT = 8777
 STORE = CapitalStore()
-API_VERSION = "0.3"
+API_VERSION = "0.3.1"
 
 
 def _json(handler: BaseHTTPRequestHandler, code: int, payload: dict) -> None:
@@ -523,6 +524,11 @@ class Handler(BaseHTTPRequestHandler):
                     ledger_type=body.get("ledger_type") or "expense",
                     remember=body.get("remember"),
                 )
+                _json(self, 200, {"ok": True, "data": result})
+                return
+
+            if u.path == "/api/import/repair":
+                result = repair_bank_import_metadata(STORE)
                 _json(self, 200, {"ok": True, "data": result})
                 return
 

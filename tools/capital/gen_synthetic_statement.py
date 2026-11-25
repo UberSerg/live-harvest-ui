@@ -50,6 +50,8 @@ def build(pages: int = 30) -> str:
     auth = 100000
     op_i = 0
     total_ops = pages * PAGE_SIZE
+    sum_in = 0
+    sum_out = 0
     for p in range(1, pages + 1):
         if p > 1:
             lines.append("Продолжение на следующей странице")
@@ -60,6 +62,10 @@ def build(pages: int = 30) -> str:
             cat, desc, amount, income = MERCHANTS[op_i % len(MERCHANTS)]
             # vary amounts
             amount = amount + (op_i % 17) * 100
+            if income:
+                sum_in += amount
+            else:
+                sum_out += amount
             hour = 10 + (op_i % 10)
             minute = (op_i * 3) % 60
             dmy = f"{day:02d}.{month:02d}.{year}"
@@ -88,6 +94,9 @@ def build(pages: int = 30) -> str:
                 break
         if op_i >= total_ops:
             break
+    lines.append("")
+    lines.append(f"Пополнение +{fmt_amount(sum_in, False)}")
+    lines.append(f"Списание {fmt_amount(sum_out, False)}")
     return "\n".join(lines) + "\n"
 
 

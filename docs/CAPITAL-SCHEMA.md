@@ -77,6 +77,7 @@ account_kind: checking|savings|deposit|cash|broker|other
 - Поля tx: `batch_id`, `fingerprint`, `direction`, `bank_category`, `merchant`, `authorization_code`, `classification_status`, `include_in_flows`, `economic_kind`, `imported_at`.
 - Сырой текст выписки **не** хранится.
 - `needs_review` / internal transfers не входят в consumer income-expense и doughnut.
+- **Банковский оборот** (все actual in/out) и **экономическая аналитика** — разные срезы; сверка footer `Пополнение`/`Списание` при импорте.
 
 ## API
 
