@@ -11,12 +11,12 @@ python -m http.server 8765
 
 http://localhost:8765/
 
-## v0.4
+## v0.4.1
 
-- Editorial layout (не bento-админка)
+- Editorial layout + live snapshot из `harvest/`
+- Literal (скрипт) + interpreted (`overlay.json`) — см. `PRESENTATION.md`
+- После харвеста: `python tools/lh_ui_snapshot.py` → UI poll / «Обновить снимок»
 - Три экрана: Обзор · Личность · Моя вселенная
-- Universe: single-render SVG, без пересоздания DOM на клик
-- Progressive disclosure
 
 ## Layout
 
@@ -28,3 +28,12 @@ http://localhost:8765/
 ## Boundaries
 
 Read-only. SoT = `harvest/`. Демо маркируется. Персональные KPI не выдумываются.
+
+## Snapshot pipeline
+
+- `overlay.json` — AI presentation layer
+- `snapshot.json` / `data.js` — generated UI data (committed so the demo runs without private `harvest/`)
+- `tools/lh_ui_snapshot.py` — builder (needs local `harvest/` sibling to regenerate)
+- `PRESENTATION.md` — literal vs interpreted contract
+
+Public clone runs on the committed snapshot; private vault regenerates after Harvester.

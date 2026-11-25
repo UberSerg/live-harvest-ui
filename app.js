@@ -1,10 +1,12 @@
 (() => {
-  const D = window.LH_DATA;
+  let D = window.LH_DATA;
+  let lastGenerated = null;
   const stage = document.getElementById("stage");
   const titleEl = document.getElementById("pageTitle");
   const kicker = document.getElementById("kicker");
   const asOf = document.getElementById("asOf");
-  asOf.textContent = `as of ${D.meta.asOf}`;
+  const snapMeta = document.getElementById("snapMeta");
+  const btnRefresh = document.getElementById("btnRefresh");
 
   const titles = {
     home: ["Сегодня", "Обзор"],
@@ -13,7 +15,7 @@
   };
 
   const esc = (s) =>
-    String(s)
+    String(s ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
@@ -21,12 +23,55 @@
 
   const epLabel = { fact: "факт", intent: "намерение", hypo: "гипотеза", open: "открытый вопрос" };
 
+  function currentRoute() {
+    const r = (location.hash || "#home").slice(1);
+    return titles[r] ? r : "home";
+  }
+
   function cluster(id) {
-    return D.portrait.clusters.find((c) => c.id === id);
+    return D.portrait?.clusters?.find((c) => c.id === id);
   }
 
   function itemsHtml(items) {
-    return items.map((it) => `<li data-ep="${esc(it.ep)}">${esc(it.text)}</li>`).join("");
+    return (items || []).map((it) => `<li data-ep="${esc(it.ep)}">${esc(it.text)}</li>`).join("");
+  }
+
+  function updateChrome() {
+    const gen = D.meta?.generated_at || D.meta?.asOf || "—";
+    asOf.textContent = `as of ${D.meta?.asOf || "—"}`;
+    if (snapMeta) {
+      const short = String(gen).replace("T", " ").replace("Z", " UTC");
+      const note = D.meta?.presentation_note ? " · интерпретация" : "";
+      snapMeta.textContent = `снимок ${short}${note}`;
+    }
+    lastGenerated = gen;
+  }
+
+  async function fetchSnapshot() {
+    const res = await fetch(`./snapshot.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`snapshot ${res.status}`);
+    return res.json();
+  }
+
+  async function reloadData({ silent = false } = {}) {
+    try {
+      const next = await fetchSnapshot();
+      D = next;
+      window.LH_DATA = next;
+      updateChrome();
+      go(currentRoute(), { skipHash: true });
+      if (!silent && btnRefresh) {
+        btnRefresh.textContent = "Обновлено";
+        setTimeout(() => {
+          btnRefresh.textContent = "Обновить снимок";
+        }, 1200);
+      }
+      return true;
+    } catch (e) {
+      if (!silent) console.warn("snapshot reload failed, using embedded data.js", e);
+      updateChrome();
+      return false;
+    }
   }
 
   /* ——— Universe: single SVG, stable handlers ——— */
@@ -80,6 +125,7 @@
           : u.status === "watch"
             ? "Область требует внимания."
             : "Есть подтверждённый срез.";
+      const modeNote = u.mode === "interpreted" ? " · формулировка UI" : u.mode === "literal" ? " · 1:1 из базы" : "";
       detailHost.className = page ? "uni-detail is-page" : "uni-detail";
       if (animate) {
         detailHost.classList.remove("detail-swap");
@@ -90,7 +136,7 @@
         <p class="d-label">область</p>
         <h3 id="uniDetailTitle">${esc(u.label)}</h3>
         <p class="d-blurb" id="uniDetailBlurb">${esc(u.blurb)}</p>
-        <p class="d-meta">${esc(statusNote)} · не KPI · связи не выдуманы</p>`;
+        <p class="d-meta">${esc(statusNote)}${esc(modeNote)} · не KPI</p>`;
     }
 
     function setActive(id, { animateDetail = true, focusNode = false } = {}) {
@@ -112,13 +158,11 @@
     function bind() {
       if (bound) return;
       bound = true;
-
       mapHost.addEventListener("click", (e) => {
         const g = e.target.closest("[data-node]");
         if (!g || !mapHost.contains(g)) return;
         onActivate(g.getAttribute("data-node"));
       });
-
       mapHost.addEventListener("keydown", (e) => {
         const g = e.target.closest("[data-node]");
         if (!g || !mapHost.contains(g)) return;
@@ -129,23 +173,17 @@
           onActivate(g.getAttribute("data-node"));
         } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
           e.preventDefault();
-          const next = ids[(i + 1) % ids.length];
-          setActive(next, { animateDetail: true, focusNode: true });
+          setActive(ids[(i + 1) % ids.length], { animateDetail: true, focusNode: true });
         } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
           e.preventDefault();
-          const prev = ids[(i - 1 + ids.length) % ids.length];
-          setActive(prev, { animateDetail: true, focusNode: true });
+          setActive(ids[(i - 1 + ids.length) % ids.length], { animateDetail: true, focusNode: true });
         }
       });
     }
 
-    function mount() {
-      mapHost.innerHTML = buildSVG();
-      bind();
-      setActive(selected, { animateDetail: false });
-    }
-
-    mount();
+    mapHost.innerHTML = buildSVG();
+    bind();
+    setActive(selected, { animateDetail: false });
     return { setActive, getSelected: () => selected };
   }
 
@@ -168,8 +206,12 @@
     const p = D.profile;
     const mq = D.mainQuest;
     const values = cluster("values");
+    const note = D.meta?.presentation_note
+      ? `<p class="pres-note">${esc(D.meta.presentation_note)}</p>`
+      : "";
     stage.innerHTML = `
       <div class="home">
+        ${note}
         <section class="intro">
           <h2 class="intro-name">${esc(p.name)}</h2>
           <p class="intro-role">${esc(p.role)}</p>
@@ -193,14 +235,14 @@
         <section>
           <p class="section-label">Моя вселенная</p>
           ${universeBlock(true)}
-          <p class="uni-hint">Выбери область — справа появится доступный срез. Полный экран: «Моя вселенная».</p>
+          <p class="uni-hint">Выбери область — справа срез из базы или UI-формулировка. Полный экран: «Моя вселенная».</p>
         </section>
 
         <section class="home-split">
           <div>
             <p class="section-label">Актуальные действия</p>
             <ul class="action-list">
-              ${D.sideQuests
+              ${(D.sideQuests || [])
                 .map(
                   (q) => `<li><span class="action-t">${esc(q.title)}</span><span class="action-m">${esc(q.meta)}</span></li>`
                 )
@@ -212,7 +254,11 @@
             <blockquote class="pull">
               <p class="pull-type">${esc(D.razvivator.type)}</p>
               <p class="pull-text">${esc(D.razvivator.text)}</p>
-              ${D.razvivator.demo ? '<p class="pull-demo">демо · не персональный вывод Harvester</p>' : ""}
+              ${
+                D.razvivator.demo
+                  ? '<p class="pull-demo">демо</p>'
+                  : `<p class="pull-demo">${esc(D.razvivator.mode === "interpreted" ? "интерпретация Harvester" : "из базы")}</p>`
+              }
             </blockquote>
           </div>
         </section>
@@ -222,15 +268,15 @@
           <div class="more-body">
             <div>
               <p class="section-label">Волны</p>
-              <ul class="soft-list">${D.waves.map((w) => `<li><span>${esc(w)}</span><span></span></li>`).join("")}</ul>
+              <ul class="soft-list">${(D.waves || []).map((w) => `<li><span>${esc(w)}</span><span></span></li>`).join("")}</ul>
             </div>
             <div>
               <p class="section-label">Прогресс</p>
               <ul class="soft-list">
-                ${D.progress.achievements
+                ${(D.progress?.achievements || [])
                   .map((a) => `<li><span>${esc(a.title)}</span><span>${esc(a.when)}</span></li>`)
                   .join("")}
-                ${D.progress.measurable
+                ${(D.progress?.measurable || [])
                   .map((m) => `<li><span>${esc(m.label)}</span><span>${esc(m.value)}</span></li>`)
                   .join("")}
               </ul>
@@ -238,7 +284,7 @@
             <div>
               <p class="section-label">Активность Harvest</p>
               <ul class="soft-list">
-                ${D.recent.map((r) => `<li><span>${esc(r.what)}</span><span>${esc(r.kind)}</span></li>`).join("")}
+                ${(D.recent || []).map((r) => `<li><span>${esc(r.what)}</span><span>${esc(r.kind)}</span></li>`).join("")}
               </ul>
             </div>
             ${
@@ -258,7 +304,7 @@
 
   function renderUniverse() {
     stage.innerHTML = `
-      <p class="uni-page-lead">Жизненные области вокруг ядра. Выбери узел — увидишь доступный срез знаний. Это карта навигации, не граф доказанных связей и не шкала личности.</p>
+      <p class="uni-page-lead">Жизненные области вокруг ядра. Срезы подтягиваются из harvest/ (literal) или overlay (interpreted). Не граф доказанных связей и не шкала личности.</p>
       ${universeBlock(false)}
       <p class="uni-hint">Клавиатура: Tab → узел · Enter · стрелки между областями.</p>`;
     wireUniverse(stage, { page: true, initialId: D.universe[0].id });
@@ -269,6 +315,7 @@
     const values = cluster("values");
     const mind = cluster("mind");
     const drive = cluster("drive");
+    const create = cluster("create");
     const edge = cluster("edge");
     const grow = cluster("grow");
     const craft = cluster("craft");
@@ -308,29 +355,22 @@
         }
 
         <section class="two-col">
-          ${
-            mind
-              ? `<div class="block"><h2>${esc(mind.title)}</h2><ul>${itemsHtml(mind.items)}</ul></div>`
-              : ""
-          }
-          ${
-            drive
-              ? `<div class="block"><h2>${esc(drive.title)}</h2><ul>${itemsHtml(drive.items)}</ul></div>`
-              : ""
-          }
+          ${mind ? `<div class="block"><h2>${esc(mind.title)}</h2><ul>${itemsHtml(mind.items)}</ul></div>` : ""}
+          ${drive ? `<div class="block"><h2>${esc(drive.title)}</h2><ul>${itemsHtml(drive.items)}</ul></div>` : ""}
         </section>
 
+        ${
+          create
+            ? `<section>
+          <p class="section-label">${esc(create.title)}${create.mode === "literal" ? " · из базы" : ""}</p>
+          <div class="block"><ul>${itemsHtml(create.items)}</ul></div>
+        </section>`
+            : ""
+        }
+
         <section class="two-col">
-          ${
-            edge
-              ? `<div class="block"><h2>${esc(edge.title)}</h2><ul>${itemsHtml(edge.items)}</ul></div>`
-              : ""
-          }
-          ${
-            grow
-              ? `<div class="block"><h2>${esc(grow.title)}</h2><ul>${itemsHtml(grow.items)}</ul></div>`
-              : ""
-          }
+          ${edge ? `<div class="block"><h2>${esc(edge.title)}</h2><ul>${itemsHtml(edge.items)}</ul></div>` : ""}
+          ${grow ? `<div class="block"><h2>${esc(grow.title)}</h2><ul>${itemsHtml(grow.items)}</ul></div>` : ""}
         </section>
 
         <details class="more">
@@ -346,7 +386,7 @@
         <section>
           <p class="section-label">История изменений</p>
           <ol class="timeline">
-            ${D.portrait.history
+            ${(D.portrait.history || [])
               .map((h) => `<li><time datetime="${esc(h.when)}">${esc(h.when)}</time><span>${esc(h.text)}</span></li>`)
               .join("")}
           </ol>
@@ -354,9 +394,9 @@
       </div>`;
   }
 
-  function go(route) {
-    const meta = titles[route] || titles.home;
+  function go(route, { skipHash = false } = {}) {
     const r = titles[route] ? route : "home";
+    const meta = titles[r];
     kicker.textContent = meta[0];
     titleEl.textContent = meta[1];
     document.querySelectorAll(".nav-btn[data-route]").forEach((b) => {
@@ -365,15 +405,40 @@
     if (r === "home") renderHome();
     else if (r === "self") renderSelf();
     else if (r === "universe") renderUniverse();
-    if (location.hash.slice(1) !== r) location.hash = r;
+    if (!skipHash && location.hash.slice(1) !== r) location.hash = r;
   }
 
   document.querySelectorAll(".nav-btn[data-route]").forEach((b) => {
     b.addEventListener("click", () => go(b.getAttribute("data-route")));
   });
-  window.addEventListener("hashchange", () => {
-    const r = (location.hash || "#home").slice(1);
-    go(titles[r] ? r : "home");
+  window.addEventListener("hashchange", () => go(currentRoute(), { skipHash: true }));
+  btnRefresh?.addEventListener("click", () => reloadData({ silent: false }));
+
+  // Live poll: if Harvester regenerated snapshot, screens refresh without hard reload
+  setInterval(async () => {
+    try {
+      const res = await fetch(`./snapshot.json?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const next = await res.json();
+      const gen = next.meta?.generated_at || next.meta?.asOf;
+      if (gen && lastGenerated && gen !== lastGenerated) {
+        D = next;
+        window.LH_DATA = next;
+        updateChrome();
+        go(currentRoute(), { skipHash: true });
+      } else if (!lastGenerated) {
+        lastGenerated = gen;
+      }
+    } catch (_) {
+      /* offline / file protocol */
+    }
+  }, 12000);
+
+  // Boot: prefer fresh snapshot over embedded data.js
+  reloadData({ silent: true }).then((ok) => {
+    if (!ok) {
+      updateChrome();
+      go(currentRoute(), { skipHash: true });
+    }
   });
-  go(titles[(location.hash || "#home").slice(1)] ? (location.hash || "#home").slice(1) : "home");
 })();
