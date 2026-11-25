@@ -313,6 +313,46 @@ a{color:inherit}
 .timeline li:last-child{border-bottom:1px solid var(--line-soft)}
 .timeline time{font:500 12px/1.4 var(--mono);color:var(--faint)}
 
+/* ——— Capital ——— */
+.cap{display:grid;gap:32px}
+.cap-toolbar{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:end}
+.cap-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cap-period input[type=date]{
+  background:var(--bg-elev);border:1px solid var(--line);color:var(--text);
+  border-radius:6px;padding:6px 8px;font:500 13px/1 var(--mono);
+}
+.cap-mode{display:grid;gap:8px;justify-items:end;font-size:13px;color:var(--muted)}
+.cap-api{font:500 11px/1 var(--mono);color:var(--faint)}
+.cap-api.ok{color:var(--life)}
+.cap-banner{margin:0;padding:12px 0;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);color:var(--muted);font-size:14px}
+.cap-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.cap-kpi{padding:4px 0 12px;border-bottom:1px solid var(--line-soft)}
+.cap-num{margin:0;font-size:24px;font-weight:600;letter-spacing:-.03em}
+.cap-sub{margin:6px 0 0;font-size:12px;color:var(--faint)}
+.cap-charts{display:grid;grid-template-columns:1.2fr .8fr;gap:24px}
+.cap-chart-box{min-height:220px}
+.cap-ops-tools{margin-bottom:10px}
+.cap-ops-tools input{
+  width:100%;max-width:320px;background:var(--bg-elev);border:1px solid var(--line);
+  color:var(--text);border-radius:6px;padding:8px 10px;font:400 14px/1.2 var(--font);
+}
+.cap-table-wrap{overflow:auto;border-top:1px solid var(--line-soft)}
+.cap-table{width:100%;border-collapse:collapse;font-size:13px}
+.cap-table th,.cap-table td{padding:10px 8px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}
+.cap-table th{font:500 11px/1 var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.cap-forms{display:grid;gap:16px;padding-top:12px;border-top:1px solid var(--line)}
+.cap-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cap-form input,.cap-form select{
+  background:var(--bg-elev);border:1px solid var(--line);color:var(--text);
+  border-radius:6px;padding:8px 10px;font:400 13px/1.2 var(--font);
+}
+.cap-form button{
+  min-height:34px;padding:0 12px;border-radius:6px;border:1px solid var(--accent);
+  color:var(--accent);font:500 13px/1 var(--mono);
+}
+.cap-form button:hover{background:var(--accent-soft)}
+.is-hidden{display:none !important}
+
 @media (max-width:900px){
   .shell{grid-template-columns:1fr}
   .rail{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line-soft);padding:18px 16px}
@@ -323,4 +363,5 @@ a{color:inherit}
   .top{flex-direction:column;align-items:start}
   .intro-name,.persona-name{font-size:36px}
   .focus-text{font-size:18px}
+  .cap-kpis,.cap-charts{grid-template-columns:1fr}
 }

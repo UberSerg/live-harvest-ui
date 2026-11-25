@@ -28,12 +28,3 @@ http://localhost:8765/
 ## Boundaries
 
 Read-only. SoT = `harvest/`. Демо маркируется. Персональные KPI не выдумываются.
-
-## Snapshot pipeline
-
-- `overlay.json` — AI presentation layer
-- `snapshot.json` / `data.js` — generated UI data (committed so the demo runs without private `harvest/`)
-- `tools/lh_ui_snapshot.py` — builder (needs local `harvest/` sibling to regenerate)
-- `PRESENTATION.md` — literal vs interpreted contract
-
-Public clone runs on the committed snapshot; private vault regenerates after Harvester.

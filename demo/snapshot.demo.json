@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "version": "0.4.1-demo",
+    "asOf": "2026-11-25",
+    "generated_at": "2026-11-25T00:00:00Z",
+    "product": "Personal Command Center",
+    "snapshot": true,
+    "demo": true,
+    "presentation_note": "Публичное демо без персональных финансовых сумм."
+  },
+  "profile": {
+    "name": "Demo User",
+    "role": "Builder of personal systems",
+    "stage": "Shipping a Life OS",
+    "focus": "Use Harvest every day",
+    "values": ["Clarity", "Agency", "Care"],
+    "motto": "When I am not worrying about anything"
+  },
+  "state": { "mood": null, "energy": null, "focus": null, "wave": null, "journal": null },
+  "universe": [
+    { "id": "family", "label": "Family", "angle": -90, "status": "active", "blurb": "Demo node.", "mode": "literal" },
+    { "id": "finance", "label": "Finance", "angle": -30, "status": "empty", "blurb": "No demo balances.", "mode": "literal" },
+    { "id": "health", "label": "Health", "angle": 20, "status": "empty", "blurb": "No demo slice.", "mode": "literal" },
+    { "id": "projects", "label": "Projects", "angle": 70, "status": "active", "blurb": "Live Harvest demo.", "mode": "literal" },
+    { "id": "work", "label": "Work", "angle": 125, "status": "active", "blurb": "Demo employment.", "mode": "literal" },
+    { "id": "learn", "label": "Learn", "angle": 175, "status": "active", "blurb": "Demo learning.", "mode": "literal" },
+    { "id": "rest", "label": "Rest", "angle": 220, "status": "empty", "blurb": "No demo slice.", "mode": "literal" }
+  ],
+  "mainQuest": {
+    "title": "Financial independence (demo)",
+    "detail": "Placeholder goal — not a real balance sheet.",
+    "checkpoint": "Confirm local Capital ledger"
+  },
+  "sideQuests": [
+    { "title": "Run capital_api locally", "meta": "127.0.0.1:8777" },
+    { "title": "Add first confirmed account", "meta": "actual only" }
+  ],
+  "waves": ["Live Harvest", "Local-first"],
+  "razvivator": {
+    "demo": true,
+    "type": "note",
+    "text": "This public build uses synthetic data. Real Capital data stays off GitHub."
+  },
+  "progress": { "achievements": [], "measurable": [] },
+  "recent": [{ "what": "Capital module MVP", "kind": "product" }],
+  "portrait": {
+    "core": { "title": "Core", "lead": "Demo character sheet.", "mode": "interpreted" },
+    "clusters": [
+      {
+        "id": "values",
+        "title": "Values",
+        "mode": "literal",
+        "items": [{ "ep": "fact", "text": "Clarity and agency (demo)" }]
+      }
+    ],
+    "history": [{ "when": "2026-11-25", "text": "Demo snapshot" }]
+  }
+}

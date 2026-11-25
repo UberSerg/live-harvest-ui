@@ -12,6 +12,7 @@
     home: ["Сегодня", "Обзор"],
     self: ["Портрет", "Личность"],
     universe: ["Исследование", "Моя вселенная"],
+    capital: ["Финансы", "Капитал"],
   };
 
   const esc = (s) =>
@@ -405,6 +406,10 @@
     if (r === "home") renderHome();
     else if (r === "self") renderSelf();
     else if (r === "universe") renderUniverse();
+    else if (r === "capital") {
+      if (window.LH_CAPITAL) window.LH_CAPITAL.render(stage);
+      else stage.innerHTML = "<p class='uni-page-lead'>Модуль Капитал не загружен.</p>";
+    }
     if (!skipHash && location.hash.slice(1) !== r) location.hash = r;
   }
 
