@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Harvest</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Навигация">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <div class="brand-name">Live Harvest</div>
+          <div class="brand-sub">personal OS · ui 0.2</div>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">жизнь</div>
+        <button class="nav-item is-active" data-route="overview" type="button"><span class="ico">◆</span>Обзор</button>
+        <button class="nav-item" data-route="personality" type="button"><span class="ico">◎</span>Личность</button>
+        <button class="nav-item is-stub" data-route="knowledge" type="button"><span class="ico">▦</span>База знаний</button>
+        <button class="nav-item is-stub" data-route="goals" type="button"><span class="ico">◇</span>Цели</button>
+        <button class="nav-item is-stub" data-route="projects" type="button"><span class="ico">▣</span>Проекты</button>
+        <button class="nav-item is-stub" data-route="finance" type="button"><span class="ico">▤</span>Финансы</button>
+        <button class="nav-item is-stub" data-route="health" type="button"><span class="ico">✚</span>Здоровье</button>
+        <button class="nav-item is-stub" data-route="plan" type="button"><span class="ico">☰</span>Планирование</button>
+        <button class="nav-item is-stub" data-route="journal" type="button"><span class="ico">✎</span>Дневник</button>
+        <button class="nav-item is-stub" data-route="retro" type="button"><span class="ico">↺</span>Ретроспектива</button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">модули</div>
+        <button class="nav-item is-stub" data-route="harvester" type="button"><span class="ico">⟶</span>Harvester</button>
+        <button class="nav-item is-stub" data-route="advisor" type="button"><span class="ico">◈</span>Advisor</button>
+        <button class="nav-item is-stub" data-route="razvivator" type="button"><span class="ico">✦</span>Развиватор</button>
+      </div>
+
+      <div class="sidebar-foot">
+        SoT: harvest/<br />
+        UI read-only · не пишет знания
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 id="pageTitle">Обзор</h1>
+        <div class="topbar-meta">
+          <span class="chip chip-accent">read-only</span>
+          <span class="chip" id="asOfChip">as of —</span>
+        </div>
+      </div>
+
+      <section class="view" id="view-overview" aria-label="Personal Dashboard"></section>
+      <section class="view" id="view-personality" hidden aria-label="Портрет личности"></section>
+      <section class="view" id="view-stub" hidden aria-label="Раздел в разработке"></section>
+    </main>
+  </div>
+
+  <script src="./data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

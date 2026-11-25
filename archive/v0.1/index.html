@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Harvest — Профиль</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <p class="brand-name">Live Harvest</p>
+          <p class="brand-sub">Динамический портрет · каркас v0.1</p>
+        </div>
+      </div>
+      <div class="top-meta">
+        <span class="chip">read-only</span>
+        <span class="chip chip-dim">SoT: harvest/</span>
+        <span class="chip chip-dim" id="asOf">обновлено —</span>
+      </div>
+    </header>
+
+    <nav class="rail" aria-label="Разделы">
+      <button class="rail-item is-active" data-panel="portrait" type="button">Портрет</button>
+      <button class="rail-item" data-panel="now" type="button">Сейчас</button>
+      <button class="rail-item" data-panel="goals" type="button">Цели</button>
+      <button class="rail-item" data-panel="projects" type="button">Проекты</button>
+      <button class="rail-item is-stub" type="button" title="Позже">Финансы</button>
+      <button class="rail-item is-stub" type="button" title="Позже">Баланс</button>
+    </nav>
+
+    <main class="stage">
+      <section class="panel is-active" id="panel-portrait" aria-labelledby="h-portrait">
+        <div class="hero">
+          <div class="hero-text">
+            <p class="eyebrow">Владелец</p>
+            <h1 id="h-portrait">Сергей</h1>
+            <p class="lede">Тимлид 1С · основатель Live Harvest · «когда я не беспокоюсь ни о чём»</p>
+          </div>
+          <div class="hero-stat">
+            <p class="stat-label">Ближайший шаг</p>
+            <p class="stat-value">Аренда в Москве</p>
+            <p class="stat-note">Покупка / дом — отложены (мало свободных денег)</p>
+          </div>
+        </div>
+
+        <div class="legend" aria-label="Эпистемическая легенда">
+          <span><i class="dot fact"></i>Факт</span>
+          <span><i class="dot intent"></i>Намерение</span>
+          <span><i class="dot hypo"></i>Гипотеза</span>
+          <span><i class="dot open"></i>Открытый вопрос</span>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <h2>Ценности и свобода</h2>
+            <ul class="list">
+              <li data-ep="fact">Свобода, финансовая независимость, семья, безопасность и покой</li>
+              <li data-ep="fact">Принципы: честность и доброта</li>
+              <li data-ep="fact">Успех вне денег — отсутствие беспокойства</li>
+              <li data-ep="hypo">Финнезависимость может быть путём к спокойствию, не статусом</li>
+            </ul>
+            <p class="src">← Ценности и понимание свободы · Ценности и опоры</p>
+          </article>
+
+          <article class="card">
+            <h2>Семья и отцовство</h2>
+            <ul class="list">
+              <li data-ep="fact">Жена, дочь, мама; жена работает в Москве</li>
+              <li data-ep="fact">Рождение дочери — переход «из пацана в отца»</li>
+              <li data-ep="intent">Harvest как наследие дочери; больше счастливого времени с семьёй</li>
+              <li data-ep="fact">Отдельный семейный Harvest пока не нужен</li>
+            </ul>
+            <p class="src">← Семья · Семья и отцовство</p>
+          </article>
+
+          <article class="card">
+            <h2>Работа</h2>
+            <ul class="list">
+              <li data-ep="fact">Тимлид 1С, международная компания, удалёнка</li>
+              <li data-ep="fact">Найм — база под ипотеку и минимум</li>
+              <li data-ep="intent">Рост компетенций: ИИ, продукты, вайбкодинг</li>
+              <li data-ep="open">При каком капитале найм необязателен — см. финцель</li>
+            </ul>
+            <p class="src">← Работа — тимлид 1С УХ · Профессиональный профиль</p>
+          </article>
+
+          <article class="card">
+            <h2>Фокус и волны</h2>
+            <ul class="list">
+              <li data-ep="fact">Ищет себя в волнах вдохновения</li>
+              <li data-ep="fact">Без вдохновения — прокрастинация / игры</li>
+              <li data-ep="intent">Систематизировать себя через Live Harvest</li>
+              <li data-ep="open">Что запускает и гасит волны?</li>
+            </ul>
+            <p class="src">← Волны вдохновения и фокус</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-now" aria-labelledby="h-now" hidden>
+        <h1 id="h-now">Сейчас</h1>
+        <p class="lede">Оперативный слой: что делать дальше, не путать с долгосрочной картиной.</p>
+        <div class="grid grid-2">
+          <article class="card card-accent">
+            <h2>Жильё</h2>
+            <ul class="list">
+              <li data-ep="fact">Первый шаг — аренда в Москве + переезд с дочерью</li>
+              <li data-ep="fact">Покупка в Москве и дом не отменены, но не планируются сейчас</li>
+              <li data-ep="open">Срок переезда? Судьба текущей ипотечной квартиры?</li>
+            </ul>
+            <p class="src">← CONTR-015 уточнён</p>
+          </article>
+          <article class="card">
+            <h2>Капитал (одна цель)</h2>
+            <ul class="list">
+              <li data-ep="fact">~50 млн / дом+30–40 / уход 50+ — грани одного намерения</li>
+              <li data-ep="intent">Live Harvest — наиболее перспективный проект для заработка</li>
+              <li data-ep="open">Монетизация и первый измеримый денежный этап</li>
+            </ul>
+            <p class="src">← CONTR-016 снят как конфликт</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-goals" aria-labelledby="h-goals" hidden>
+        <h1 id="h-goals">Цели</h1>
+        <div class="grid">
+          <article class="card"><h2>Финансовая независимость</h2><p class="body">Одна цель, разные формулировки. Карточки не сливать в одну метрику-число.</p></article>
+          <article class="card"><h2>Жизнь 2–3 года</h2><p class="body">Дом, семья, проекты по кайфу — картина; ближайший шаг уже в «Сейчас».</p></article>
+          <article class="card"><h2>Образ жизни</h2><p class="body">Тёплое место, идеальный день, спокойный спортивный «я» через ~5 лет.</p></article>
+          <article class="card"><h2>Год развития</h2><p class="body">Финансы, спорт, самопознание, лёгкое планирование через Harvest.</p></article>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-projects" aria-labelledby="h-projects" hidden>
+        <h1 id="h-projects">Проекты</h1>
+        <div class="grid">
+          <article class="card card-accent"><h2>Live Harvest</h2><p class="body">Активный · этот экран — каркас портрета (read-only). Запись знаний — Harvester / Obsidian.</p></article>
+          <article class="card"><h2>Kraken</h2><p class="body">Инвест-intelligence. Возможная будущая модульная связка — гипотеза, не архитектура.</p></article>
+          <article class="card"><h2>Остальные</h2><p class="body">Invest_GPT · cashflow_app · poker-copilot · Esports Brain — список без приоритизации UI.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <aside class="side">
+      <h2>Слой истины</h2>
+      <p class="side-copy">Экран не SoT. Правка фактов — в <code>harvest/</code> через Harvester или Obsidian. Здесь только сборка портрета.</p>
+      <h2>Следующие куски UI</h2>
+      <ol class="side-list">
+        <li>Подтянуть INDEX / карточки автоматически</li>
+        <li>Клик → открыть исходный .md</li>
+        <li>«Оспорить» → черновик для Harvester</li>
+        <li>Фильтр факт / намерение / гипотеза</li>
+      </ol>
+      <h2>Вне скоупа каркаса</h2>
+      <p class="side-copy">Геймификация, дерево навыков, запись в базу из UI, модули Kraken.</p>
+    </aside>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>
