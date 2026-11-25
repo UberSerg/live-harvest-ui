@@ -1,0 +1,18 @@
+{
+  "provenance": "synthetic-demo",
+  "synthetic": true,
+  "portrait_updated": false,
+  "auto_send": false,
+  "generated_on": "2026-11-25",
+  "generator": "python tools/lh_research_packet.py tools/fixtures/lh_research/hypothesis_card.md",
+  "source_fixture": "tools/fixtures/lh_research/hypothesis_card.md",
+  "copy_file": "research-packet.prompt.txt",
+  "includes": [
+    "цель гипотезы",
+    "известный пункт",
+    "гипотеза и открытый вопрос",
+    "правила интервью"
+  ],
+  "excludes": ["секреты", "суммы", "тела связанных карточек", "ledger", "портрет"],
+  "note": "Секция «Секреты» фикстуры в промпт не копируется. Карточка «DEMO — синтетическая гипотеза» этой командой даёт no_hypothesis: в ней нет маркированных гипотез."
+}

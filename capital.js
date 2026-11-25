@@ -12,13 +12,56 @@
   ];
 
   let state = {
-    tab: "overview",
+    tab: (() => {
+      try {
+        return sessionStorage.getItem("lh-cap-tab") || "overview";
+      } catch {
+        return "overview";
+      }
+    })(),
     from: "",
     to: "",
     summary: null,
     toastTimer: null,
-    filters: { q: "", type: "", status: "", account: "" },
+    periodPreset: "this_month",
+    filters: { q: "", type: "", status: "", account: "", category: "" },
+    drawer: null,
   };
+
+  function isoLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function monthBounds(offset = 0) {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    const to = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+    return { from: isoLocal(from), to: isoLocal(to) };
+  }
+
+  function setTab(tab, opts = {}) {
+    state.tab = tab;
+    try {
+      sessionStorage.setItem("lh-cap-tab", tab);
+    } catch {
+      /* ignore */
+    }
+    if (opts.filters) Object.assign(state.filters, opts.filters);
+    renderTabs();
+    paintBody();
+    requestAnimationFrame(() => {
+      const body = document.getElementById("capBody");
+      body?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(".cap-tab.is-active")?.scrollIntoView({
+        behavior: "smooth",
+        inline: "nearest",
+        block: "nearest",
+      });
+    });
+  }
 
   const esc = (s) =>
     String(s ?? "")
@@ -97,10 +140,7 @@
   }
 
   function periodDefaults() {
-    const to = new Date();
-    const from = new Date(to.getFullYear(), to.getMonth() - 5, 1);
-    const iso = (d) => d.toISOString().slice(0, 10);
-    return { from: iso(from), to: iso(to) };
+    return monthBounds(0);
   }
 
   function chartOpts() {
@@ -124,26 +164,30 @@
       state.to = p.to;
       stage.innerHTML = `
         <div class="cap" id="capRoot">
-          <div class="cap-toolbar">
-            <div>
-              <p class="section-label">Период</p>
-              <div class="cap-period">
-                <input type="date" id="capFrom" value="${p.from}" />
-                <span>—</span>
-                <input type="date" id="capTo" value="${p.to}" />
-                <button type="button" class="btn-refresh" id="capReload">Обновить</button>
+          <header class="cap-chrome">
+            <div class="cap-toolbar">
+              <div>
+                <p class="section-label">Период</p>
+                <div class="cap-period">
+                  <input type="date" id="capFrom" value="${p.from}" />
+                  <span>—</span>
+                  <input type="date" id="capTo" value="${p.to}" />
+                  <button type="button" class="btn-refresh" id="capReload">Обновить</button>
+                </div>
+                <div class="cap-presets" id="capPresets"></div>
               </div>
-              <div class="cap-presets" id="capPresets"></div>
+              <div class="cap-mode">
+                <button type="button" class="btn-primary" id="capImportBtn">Импорт выписки</button>
+                <span class="cap-api" id="capApi">API…</span>
+              </div>
             </div>
-            <div class="cap-mode">
-              <button type="button" class="btn-primary" id="capImportBtn">Импорт выписки</button>
-              <span class="cap-api" id="capApi">API…</span>
-            </div>
-          </div>
-          <nav class="cap-tabs" id="capTabs" role="tablist"></nav>
+            <nav class="cap-tabs" id="capTabs" role="tablist" aria-label="Разделы капитала"></nav>
+          </header>
           <p class="cap-banner" id="capBanner">Загрузка…</p>
           <div id="capImportReport" class="cap-import-report is-hidden"></div>
           <div id="capBody"></div>
+          <aside class="cap-drawer" id="capDrawer" hidden></aside>
+          <div class="cap-drawer-backdrop" id="capDrawerBackdrop" hidden></div>
           <div class="cap-toast" id="capToast" role="status"></div>
           <div class="cap-dialog" id="capDialog"></div>
           <div class="cap-dialog" id="capImportModal"></div>
@@ -151,9 +195,21 @@
       renderTabs();
       renderPresets();
       document.getElementById("capReload").onclick = () => reload();
-      document.getElementById("capFrom").onchange = () => reload();
-      document.getElementById("capTo").onchange = () => reload();
+      document.getElementById("capFrom").onchange = () => {
+        state.periodPreset = "custom";
+        renderPresets();
+        reload();
+      };
+      document.getElementById("capTo").onchange = () => {
+        state.periodPreset = "custom";
+        renderPresets();
+        reload();
+      };
       document.getElementById("capImportBtn").onclick = () => openImportModal();
+      document.getElementById("capDrawerBackdrop").onclick = () => closeDrawer();
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && state.drawer) closeDrawer();
+      });
       await reload();
     },
   };
@@ -170,25 +226,40 @@
       ["all", "Весь период"],
     ];
     host.innerHTML = items
-      .map(([id, label]) => `<button type="button" class="cap-preset" data-p="${id}">${label}</button>`)
+      .map(
+        ([id, label]) =>
+          `<button type="button" class="cap-preset${
+            state.periodPreset === id ? " is-active" : ""
+          }" data-p="${id}" aria-pressed="${state.periodPreset === id}">${label}</button>`
+      )
       .join("");
     host.querySelectorAll("[data-p]").forEach((btn) => {
       btn.onclick = () => {
         const now = new Date();
-        const iso = (d) => d.toISOString().slice(0, 10);
         const id = btn.getAttribute("data-p");
         let from;
-        let to = iso(now);
-        if (id === "this_month") from = iso(new Date(now.getFullYear(), now.getMonth(), 1));
-        else if (id === "last_month") {
-          from = iso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-          to = iso(new Date(now.getFullYear(), now.getMonth(), 0));
-        } else if (id === "m3") from = iso(new Date(now.getFullYear(), now.getMonth() - 2, 1));
-        else if (id === "m6") from = iso(new Date(now.getFullYear(), now.getMonth() - 5, 1));
-        else if (id === "year") from = iso(new Date(now.getFullYear(), 0, 1));
-        else from = "2020-01-01";
+        let to;
+        if (id === "this_month") {
+          ({ from, to } = monthBounds(0));
+        } else if (id === "last_month") {
+          ({ from, to } = monthBounds(-1));
+        } else if (id === "m3") {
+          from = isoLocal(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+          to = monthBounds(0).to;
+        } else if (id === "m6") {
+          from = isoLocal(new Date(now.getFullYear(), now.getMonth() - 5, 1));
+          to = monthBounds(0).to;
+        } else if (id === "year") {
+          from = isoLocal(new Date(now.getFullYear(), 0, 1));
+          to = monthBounds(0).to;
+        } else {
+          from = "2020-01-01";
+          to = monthBounds(0).to;
+        }
+        state.periodPreset = id;
         document.getElementById("capFrom").value = from;
         document.getElementById("capTo").value = to;
+        renderPresets();
         reload();
       };
     });
@@ -350,17 +421,90 @@
 
   function renderTabs() {
     const nav = document.getElementById("capTabs");
+    if (!nav) return;
     nav.innerHTML = TABS.map(
       ([id, label]) =>
-        `<button type="button" role="tab" class="cap-tab${state.tab === id ? " is-active" : ""}" data-tab="${id}">${esc(label)}</button>`
+        `<button type="button" role="tab" class="cap-tab${
+          state.tab === id ? " is-active" : ""
+        }" data-tab="${id}" aria-selected="${state.tab === id}" id="cap-tab-${id}">${esc(label)}</button>`
     ).join("");
     nav.querySelectorAll("[data-tab]").forEach((btn) => {
-      btn.onclick = () => {
-        state.tab = btn.getAttribute("data-tab");
-        renderTabs();
-        paintBody();
-      };
+      btn.onclick = () => setTab(btn.getAttribute("data-tab"));
     });
+  }
+
+  function closeDrawer() {
+    state.drawer = null;
+    const drawer = document.getElementById("capDrawer");
+    const backdrop = document.getElementById("capDrawerBackdrop");
+    if (drawer) {
+      drawer.hidden = true;
+      drawer.innerHTML = "";
+      drawer.classList.remove("is-open");
+    }
+    if (backdrop) backdrop.hidden = true;
+  }
+
+  function openOpDrawer({ title, subtitle, ops, openFilters }) {
+    const drawer = document.getElementById("capDrawer");
+    const backdrop = document.getElementById("capDrawerBackdrop");
+    if (!drawer || !backdrop) return;
+    const list = ops || [];
+    state.drawer = { title, ops: list };
+    drawer.hidden = false;
+    backdrop.hidden = false;
+    drawer.classList.add("is-open");
+    drawer.innerHTML = `
+      <div class="cap-drawer-head">
+        <div>
+          <p class="section-label">Операции</p>
+          <h3>${esc(title)}</h3>
+          ${subtitle ? `<p class="cap-sub">${esc(subtitle)}</p>` : ""}
+        </div>
+        <button type="button" class="btn-ghost" id="capDrawerClose" aria-label="Закрыть">Закрыть</button>
+      </div>
+      <div class="cap-drawer-meta">
+        <span>${list.length} шт.</span>
+        <input type="search" id="capDrawerQ" placeholder="Фильтр в списке…" />
+      </div>
+      <ul class="cap-op-list" id="capDrawerList">
+        ${
+          list
+            .map((o) => {
+              const q = `${o.date || ""} ${o.merchant || ""} ${o.comment || ""} ${o.economic_kind || ""} ${o.type || ""}`;
+              return `<li data-q="${esc(q)}">
+                <div>
+                  <p class="cap-op-date">${esc(o.date || "—")}</p>
+                  <p class="cap-op-title">${esc(o.merchant || o.comment || o.economic_kind || o.type || "Операция")}</p>
+                  <p class="cap-op-sub">${esc(o.comment || o.bank_category || "")}</p>
+                </div>
+                <p class="cap-op-amt">${esc(fmt(o.amount_minor, o.currency))}</p>
+              </li>`;
+            })
+            .join("") || `<li class="is-empty"><span>Пусто</span></li>`
+        }
+      </ul>
+      <div class="cap-drawer-foot">
+        ${
+          openFilters
+            ? `<button type="button" class="btn-primary" id="capDrawerToOps">Открыть во вкладке Операции</button>`
+            : ""
+        }
+      </div>`;
+    drawer.querySelector("#capDrawerClose").onclick = () => closeDrawer();
+    drawer.querySelector("#capDrawerQ").oninput = (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      drawer.querySelectorAll("#capDrawerList li[data-q]").forEach((li) => {
+        li.hidden = q && !(li.getAttribute("data-q") || "").toLowerCase().includes(q);
+      });
+    };
+    const toOps = drawer.querySelector("#capDrawerToOps");
+    if (toOps && openFilters) {
+      toOps.onclick = () => {
+        closeDrawer();
+        setTab("ops", { filters: openFilters });
+      };
+    }
   }
 
   async function reload() {
@@ -371,7 +515,7 @@
     document.getElementById("stage")?.classList.add("is-wide");
     try {
       await api("/api/health");
-      apiEl.textContent = "API · 127.0.0.1:8777 · v0.2";
+      apiEl.textContent = "API · localhost · v0.3";
       apiEl.classList.add("ok");
     } catch {
       apiEl.textContent = "API офлайн";
@@ -386,7 +530,11 @@
       state.summary = await api(
         `/api/summary?from=${encodeURIComponent(state.from)}&to=${encodeURIComponent(state.to)}`
       );
-      banner.innerHTML = `Срез ${esc(state.summary.as_of)} · база ${esc(state.summary.base_currency)} · факт / план / прогноз разделены`;
+      const fromLabel = state.from;
+      const toLabel = state.to;
+      banner.innerHTML = `Период ${esc(fromLabel)} → ${esc(toLabel)} · срез ${esc(
+        state.summary.as_of
+      )} · ${esc(state.summary.base_currency)}`;
       paintBody();
     } catch (e) {
       banner.textContent = "Ошибка API: " + e.message;
@@ -427,130 +575,106 @@
     const reconClass =
       recon.status === "matched" ? "is-ok" : recon.status === "mismatch" ? "is-err" : "is-warn";
     const buckets = economic.buckets || [];
+    const planNet = monthlyPlan.net_cashflow_minor || 0;
+    const planTone = planNet >= 0 ? "is-positive" : "";
+    const liquidTone = "is-positive";
+    const monthName = new Date(state.from + "T12:00:00").toLocaleDateString("ru-RU", {
+      month: "long",
+      year: "numeric",
+    });
     return `
       <section class="cap-hero">
         <div>
-          <p class="cap-hero-kicker">Курс на независимость</p>
-          <h2 class="cap-hero-title">Каждый месяц усиливает свободу</h2>
-          <p class="cap-hero-lead">Банковский оборот и экономическая аналитика разделены. Неизвестный остаток не равен нулю.</p>
+          <p class="cap-hero-kicker">Курс на независимость · ${esc(monthName)}</p>
+          <h2 class="cap-hero-title">Деньги работают на свободу</h2>
+          <p class="cap-hero-lead">Смотри ликвидность, план и куда уходит месяц. Долг и чистый капитал — внизу, по запросу.</p>
         </div>
-        <div class="cap-hero-stat">
-          <p class="section-label">Чистый капитал</p>
-          <p class="cap-num">${esc(fmt(nw.net_worth_minor))}</p>
-          <p class="cap-sub">${nw.complete ? "полный срез" : "есть пробелы данных"}</p>
-        </div>
-      </section>
-      <p class="cap-recon ${reconClass}" id="capRecon">${esc(recon.message || "Итоги выписки отсутствуют")}</p>
-      <section>
-        <p class="section-label">Банковский оборот периода</p>
-        <section class="cap-pos">
-          <div class="cap-kpi is-positive cap-click" data-drill="bank_in">
-            <p class="section-label">Поступления</p>
-            <p class="cap-num">${esc(fmt(bank.inflow_minor))}</p>
-            <p class="cap-sub">${esc(bank.count_in || 0)} операций · нажми для списка</p>
-          </div>
-          <div class="cap-kpi cap-click" data-drill="bank_out">
-            <p class="section-label">Списания</p>
-            <p class="cap-num">${esc(fmt(bank.outflow_minor))}</p>
-            <p class="cap-sub">${esc(bank.count_out || 0)} операций · нажми для списка</p>
-          </div>
-          <div class="cap-kpi is-positive">
-            <p class="section-label">Чистое движение</p>
-            <p class="cap-num">${esc(fmt(bank.net_minor))}</p>
-            <p class="cap-sub">все actual, без фильтра классификации</p>
-          </div>
-          <div class="cap-kpi">
+        <div class="cap-hero-stats">
+          <div class="cap-hero-stat ${liquidTone}">
             <p class="section-label">Ликвидность</p>
             <p class="cap-num">${esc(fmt(nw.liquid_minor))}</p>
-            <p class="cap-sub">${nw.liquid_complete ? "известные счета" : "неполная"}</p>
+            <p class="cap-sub">${nw.liquid_complete ? "известные счета" : "есть пробелы"}</p>
           </div>
-        </section>
+          <div class="cap-hero-stat ${planTone}">
+            <p class="section-label">План / мес</p>
+            <p class="cap-num">${esc(fmt(planNet))}</p>
+            <p class="cap-sub">шаблоны recurring</p>
+          </div>
+        </div>
       </section>
+      ${
+        recon.status && recon.status !== "missing" && recon.message
+          ? `<p class="cap-recon ${reconClass}" id="capRecon">${esc(recon.message)}</p>`
+          : ""
+      }
       <section>
-        <p class="section-label">Экономическая аналитика</p>
-        <section class="cap-pos">
+        <div class="cap-sec-head">
+          <p class="section-label">Движение месяца</p>
+          <button type="button" class="linkish" data-goto="ops">Все операции →</button>
+        </div>
+        <section class="cap-pos cap-pos-4">
+          <div class="cap-kpi is-positive cap-click" data-drill="bank_in" tabindex="0">
+            <p class="section-label">Поступления</p>
+            <p class="cap-num">${esc(fmt(bank.inflow_minor))}</p>
+            <p class="cap-sub">${esc(bank.count_in || 0)} · открыть список</p>
+          </div>
+          <div class="cap-kpi cap-click" data-drill="bank_out" tabindex="0">
+            <p class="section-label">Списания</p>
+            <p class="cap-num">${esc(fmt(bank.outflow_minor))}</p>
+            <p class="cap-sub">${esc(bank.count_out || 0)} · открыть список</p>
+          </div>
           <div class="cap-kpi is-positive">
             <p class="section-label">Факт-доходы</p>
             <p class="cap-num">${esc(fmt(flows.income_minor))}</p>
-            <p class="cap-sub">подтверждённые · не весь оборот</p>
+            <p class="cap-sub">экономические</p>
           </div>
           <div class="cap-kpi">
             <p class="section-label">Факт-расходы</p>
             <p class="cap-num">${esc(fmt(flows.expense_minor))}</p>
-            <p class="cap-sub">потребительские / подтверждённые</p>
-          </div>
-          <div class="cap-kpi">
-            <p class="section-label">Экон. поток</p>
-            <p class="cap-num">${esc(fmt(flows.net_cashflow_minor))}</p>
-            <p class="cap-sub">исключены переводы и needs_review</p>
-          </div>
-          <div class="cap-kpi is-positive">
-            <p class="section-label">План / мес</p>
-            <p class="cap-num">${esc(fmt(monthlyPlan.net_cashflow_minor))}</p>
-            <p class="cap-sub">шаблоны · период ${esc(fmt(periodPlan.net_cashflow_minor))}</p>
+            <p class="cap-sub">без переводов</p>
           </div>
         </section>
-        <ul class="cap-econ-list" id="capEconList">
-          ${buckets
-            .map(
-              (b) =>
-                `<li class="cap-click" data-econ="${esc(b.id)}"><span>${esc(b.label)} · ${esc(b.count)}</span><span>${esc(
-                  fmt(b.amount_minor)
-                )}</span></li>`
-            )
-            .join("") || "<li><span>Нет движений за период</span><span></span></li>"}
-        </ul>
-        <p class="cap-sub">Сумма типов ${
-          economic.matches_bank_in && economic.matches_bank_out
-            ? "сходится с банковским оборотом"
-            : "⚠ не сходится с оборотом (δ in " +
-              fmt(economic.delta_in_minor) +
-              " / out " +
-              fmt(economic.delta_out_minor) +
-              ")"
-        }</p>
-        <div id="capEconDrill" class="cap-drill is-hidden"></div>
       </section>
-      ${
-        incomplete.length
-          ? `<p class="cap-gaps">Пробелы модели: ${esc(incomplete.join(" · "))}</p>`
-          : ""
-      }
-      <details class="cap-debt">
-        <summary>${debtIcon}<span>Обязательства · ${esc(fmt(nw.liabilities_minor))} · раскрыть</span></summary>
-        <div class="cap-debt-body">
-          <ul class="soft-list">${(s.liabilities || [])
-            .map(
-              (l) =>
-                `<li><span>${esc(l.name)}</span><span>${esc(
-                  fmt(l.computed_principal_minor ?? l.principal_remaining_minor)
-                )}</span></li>`
-            )
-            .join("") || "<li><span>Нет обязательств</span><span></span></li>"}</ul>
-        </div>
-      </details>
       <section class="cap-spend">
         <div class="cap-doughnut-wrap">
-          <p class="section-label">Расходы по категориям</p>
+          <p class="section-label">Куда уходят деньги</p>
           <div class="cap-doughnut-stage">
             <canvas id="chartExp" height="220"></canvas>
             <div class="cap-doughnut-center" id="capExpCenter">
-              <p class="cap-sub">всего</p>
+              <p class="cap-sub">расходы</p>
               <p class="cap-num" id="capExpTotal">—</p>
             </div>
           </div>
         </div>
         <div>
-          <p class="section-label">Категории (экон. расходы)</p>
+          <p class="section-label">Категории · нажми, чтобы провалиться</p>
           <ul class="cap-legend" id="capExpLegend"></ul>
-          <p class="section-label" style="margin-top:14px">Вне графика</p>
-          <ul class="soft-list" id="capExpExcluded"></ul>
-          <div id="capExpDrill" class="cap-drill is-hidden"></div>
+          <details class="cap-inline-details">
+            <summary>Вне графика и классификация</summary>
+            <ul class="soft-list" id="capExpExcluded"></ul>
+            <ul class="cap-econ-list" id="capEconList">
+              ${
+                buckets
+                  .map(
+                    (b) =>
+                      `<li class="cap-click" data-econ="${esc(b.id)}"><span>${esc(b.label)} · ${esc(
+                        b.count
+                      )}</span><span>${esc(fmt(b.amount_minor))}</span></li>`
+                  )
+                  .join("") || "<li><span>Нет движений за период</span><span></span></li>"
+              }
+            </ul>
+            <p class="cap-sub">Сверка типов ${
+              economic.matches_bank_in && economic.matches_bank_out
+                ? "ок"
+                : "δ in " + fmt(economic.delta_in_minor) + " / out " + fmt(economic.delta_out_minor)
+            }</p>
+          </details>
         </div>
       </section>
       <section class="cap-charts">
         <div class="cap-chart-box">
-          <p class="section-label">Доходы и расходы по месяцам (факт)</p>
+          <p class="section-label">Доходы и расходы по месяцам</p>
           <canvas id="chartFlow" height="140"></canvas>
         </div>
         <div class="cap-chart-box">
@@ -565,42 +689,155 @@
           <div id="capHarvestQ"></div>
         </div>
         <div>
-          <p class="section-label">FI / цели</p>
+          <p class="section-label">Финансовая свобода</p>
           ${
             fi.ready
-              ? `<p class="cap-num">${esc(fmt(fi.current_fi_capital_minor))} / ${esc(fmt(fi.target_capital_minor))}</p>
-                 <p class="cap-sub">прогресс ${(fi.progress_ratio * 100).toFixed(1)}%${
-                   fi.months_to_fi_estimate != null
-                     ? " · ~" + fi.months_to_fi_estimate + " мес"
-                     : ""
-                 }</p>`
-              : `<p class="cap-sub">Параметры FI ещё не подтверждены — вкладка «Цели / FI».</p>`
+              ? `<p class="cap-num is-life">${esc(((fi.progress_ratio || 0) * 100).toFixed(1))}%</p>
+                 <p class="cap-sub">${esc(fmt(fi.current_fi_capital_minor))} из ${esc(
+                   fmt(fi.target_capital_minor)
+                 )}${
+                   fi.months_to_fi_estimate != null ? " · ~" + fi.months_to_fi_estimate + " мес" : ""
+                 }</p>
+                 <button type="button" class="linkish" data-goto="goals">Цели / FI →</button>`
+              : `<p class="cap-sub">Задай цель — вкладка «Цели / FI».</p>
+                 <button type="button" class="linkish" data-goto="goals">Настроить →</button>`
           }
-          <p class="section-label" style="margin-top:18px">Последние импорты</p>
+          <p class="section-label" style="margin-top:18px">Импорты</p>
           <ul class="soft-list" id="capBatches"></ul>
         </div>
-      </section>`;
+      </section>
+      ${
+        incomplete.length
+          ? `<p class="cap-gaps">Пробелы модели: ${esc(incomplete.join(" · "))}</p>`
+          : ""
+      }
+      <details class="cap-debt">
+        <summary>${debtIcon}<span>Обязательства и чистый капитал · без акцента на дашборде</span></summary>
+        <div class="cap-debt-body">
+          <div class="cap-pos" style="margin-bottom:12px">
+            <div class="cap-kpi">
+              <p class="section-label">Чистый капитал</p>
+              <p class="cap-num">${esc(fmt(nw.net_worth_minor))}</p>
+              <p class="cap-sub">ликвидность − обязательства${nw.complete ? "" : " · неполный срез"}</p>
+            </div>
+            <div class="cap-kpi">
+              <p class="section-label">Обязательства</p>
+              <p class="cap-num">${esc(fmt(nw.liabilities_minor))}</p>
+            </div>
+            <div class="cap-kpi">
+              <p class="section-label">Экон. поток периода</p>
+              <p class="cap-num">${esc(fmt(flows.net_cashflow_minor))}</p>
+              <p class="cap-sub">план периода ${esc(fmt(periodPlan.net_cashflow_minor))}</p>
+            </div>
+          </div>
+          <ul class="soft-list">${
+            (s.liabilities || [])
+              .map(
+                (l) =>
+                  `<li><span>${esc(l.name)}</span><span>${esc(
+                    fmt(l.computed_principal_minor ?? l.principal_remaining_minor)
+                  )}</span></li>`
+              )
+              .join("") || "<li><span>Нет обязательств</span><span></span></li>"
+          }</ul>
+          <button type="button" class="linkish" data-goto="debt">Раздел обязательств →</button>
+        </div>
+      </details>`;
   }
 
   function viewOps(s) {
     const accMap = Object.fromEntries((s.accounts || []).map((a) => [a.id, a]));
+    const catMap = Object.fromEntries((s.categories || []).map((c) => [c.id, c]));
     const accOpts = (s.accounts || [])
-      .map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`)
+      .map(
+        (a) =>
+          `<option value="${esc(a.id)}" ${state.filters.account === a.id ? "selected" : ""}>${esc(
+            a.name
+          )}</option>`
+      )
       .join("");
     const catOpts = (s.categories || [])
-      .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
+      .map(
+        (c) =>
+          `<option value="${esc(c.id)}" ${state.filters.category === c.id ? "selected" : ""}>${esc(
+            c.name
+          )}</option>`
+      )
       .join("");
     const liaOpts = (s.liabilities || [])
       .map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`)
       .join("");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = isoLocal(new Date());
+    const f = state.filters;
     return `
-      <section class="cap-panel">
-        <div class="cap-panel-head">
-          <h3>Новая операция</h3>
-          <button type="button" class="btn-ghost" id="capMat">Материализовать recurring за месяц</button>
+      <section>
+        <div class="cap-sec-head">
+          <div>
+            <p class="section-label">Операции периода</p>
+            <h3 class="cap-inline-title">${esc(state.from)} → ${esc(state.to)}</h3>
+          </div>
+          <button type="button" class="btn-ghost" id="capMat">Материализовать recurring</button>
         </div>
-        <form id="formTx" class="cap-form">
+        <div class="cap-ops-tools">
+          <input type="search" id="capSearch" placeholder="Поиск…" value="${esc(f.q)}" />
+          <select id="fltType">
+            <option value="">тип</option>
+            ${["income", "expense", "transfer", "debt_principal", "debt_interest"]
+              .map((t) => `<option value="${t}" ${f.type === t ? "selected" : ""}>${t}</option>`)
+              .join("")}
+          </select>
+          <select id="fltStatus">
+            <option value="">статус</option>
+            ${["actual", "planned", "void"]
+              .map((t) => `<option value="${t}" ${f.status === t ? "selected" : ""}>${t}</option>`)
+              .join("")}
+          </select>
+          <select id="fltAcc"><option value="">счёт</option>${accOpts}</select>
+          <select id="fltCat"><option value="">категория</option>${catOpts}</select>
+          ${
+            f.q || f.type || f.status || f.account || f.category
+              ? `<button type="button" class="btn-ghost" id="capFltClear">Сбросить</button>`
+              : ""
+          }
+        </div>
+        <div class="cap-table-wrap">
+          <table class="cap-table" id="capTable">
+            <thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Счёт</th><th>Категория</th><th>Статус</th><th>Комментарий</th><th></th></tr></thead>
+            <tbody>${(s.transactions || [])
+              .map((t) => {
+                const acc = accMap[t.account_id]?.name || t.account_id || "—";
+                const cat = catMap[t.category_id]?.name || "";
+                const q =
+                  (t.comment || "") +
+                  " " +
+                  (t.merchant || "") +
+                  " " +
+                  t.type +
+                  " " +
+                  acc +
+                  " " +
+                  cat;
+                return `<tr data-type="${esc(t.type)}" data-status="${esc(t.status)}" data-acc="${esc(
+                  t.account_id || ""
+                )}" data-cat="${esc(t.category_id || "")}" data-q="${esc(q)}">
+                  <td>${esc(t.date)}</td><td>${esc(t.type)}</td>
+                  <td>${esc(fmt(t.amount_minor, t.currency))}</td>
+                  <td>${esc(acc)}</td><td>${esc(cat || "—")}</td><td>${esc(t.status)}</td>
+                  <td>${esc(t.comment || t.merchant || "")}</td>
+                  <td class="cap-row-actions">
+                    ${t.status === "planned" ? `<button type="button" data-confirm="${esc(t.id)}" class="linkish">факт</button>` : ""}
+                    ${t.status !== "void" ? `<button type="button" data-edit="${esc(t.id)}" class="linkish">правка</button>` : ""}
+                    ${t.status !== "void" ? `<button type="button" data-dup="${esc(t.id)}" class="linkish">копия</button>` : ""}
+                    ${t.status !== "void" ? `<button type="button" data-void="${esc(t.id)}" class="linkish">отмена</button>` : ""}
+                  </td></tr>`;
+              })
+              .join("")}</tbody>
+          </table>
+        </div>
+      </section>
+      <details class="cap-inline-details">
+        <summary>Добавить операцию вручную</summary>
+        <form id="formTx" class="cap-form" style="margin-top:12px">
           <input type="date" name="date" required value="${today}" />
           <select name="type">
             <option value="income">доход</option>
@@ -615,133 +852,165 @@
           </select>
           <input name="amount" required placeholder="Сумма" />
           <select name="currency"><option>RUB</option><option>USD</option><option>EUR</option></select>
-          <select name="account_id" required><option value="">счёт…</option>${accOpts}</select>
-          <select name="counterparty_account_id"><option value="">контрагент</option>${accOpts}</select>
-          <select name="category_id"><option value="">категория</option>${catOpts}</select>
+          <select name="account_id" required><option value="">счёт…</option>${(s.accounts || [])
+            .map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`)
+            .join("")}</select>
+          <select name="counterparty_account_id"><option value="">контрагент</option>${(s.accounts || [])
+            .map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`)
+            .join("")}</select>
+          <select name="category_id"><option value="">категория</option>${(s.categories || [])
+            .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
+            .join("")}</select>
           <select name="liability_id"><option value="">обязательство</option>${liaOpts}</select>
           <input name="comment" placeholder="Комментарий" class="cap-grow" />
           <button type="submit" class="btn-primary">Добавить</button>
         </form>
-      </section>
-      <section>
-        <div class="cap-ops-tools">
-          <input type="search" id="capSearch" placeholder="Поиск…" value="${esc(state.filters.q)}" />
-          <select id="fltType"><option value="">тип</option><option>income</option><option>expense</option><option>transfer</option><option>debt_principal</option><option>debt_interest</option></select>
-          <select id="fltStatus"><option value="">статус</option><option>actual</option><option>planned</option><option>void</option></select>
-          <select id="fltAcc"><option value="">счёт</option>${accOpts}</select>
-        </div>
-        <div class="cap-table-wrap">
-          <table class="cap-table" id="capTable">
-            <thead><tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Счёт</th><th>Статус</th><th>Комментарий</th><th></th></tr></thead>
-            <tbody>${(s.transactions || [])
-              .map((t) => {
-                const acc = accMap[t.account_id]?.name || t.account_id || "—";
-                return `<tr data-type="${esc(t.type)}" data-status="${esc(t.status)}" data-acc="${esc(t.account_id)}" data-q="${esc(
-                  (t.comment || "") + " " + t.type + " " + acc
-                )}">
-                  <td>${esc(t.date)}</td><td>${esc(t.type)}</td>
-                  <td>${esc(fmt(t.amount_minor, t.currency))}</td>
-                  <td>${esc(acc)}</td><td>${esc(t.status)}</td><td>${esc(t.comment || "")}</td>
-                  <td class="cap-row-actions">
-                    ${t.status === "planned" ? `<button type="button" data-confirm="${esc(t.id)}" class="linkish">факт</button>` : ""}
-                    ${t.status !== "void" ? `<button type="button" data-edit="${esc(t.id)}" class="linkish">правка</button>` : ""}
-                    ${t.status !== "void" ? `<button type="button" data-dup="${esc(t.id)}" class="linkish">копия</button>` : ""}
-                    ${t.status !== "void" ? `<button type="button" data-void="${esc(t.id)}" class="linkish">отмена</button>` : ""}
-                  </td></tr>`;
-              })
-              .join("")}</tbody>
-          </table>
-        </div>
-      </section>
-      <section>
-        <p class="section-label">История исправлений</p>
-        <ul class="soft-list">${(s.journal || [])
-          .slice(0, 12)
-          .map(
-            (j) =>
-              `<li><span>${esc(j.event)} · ${esc(j.target_id)}</span><span>${esc(j.at || "")}</span></li>`
-          )
-          .join("") || "<li><span>Пусто</span><span></span></li>"}</ul>
-      </section>`;
+      </details>
+      <details class="cap-inline-details">
+        <summary>История исправлений</summary>
+        <ul class="soft-list">${
+          (s.journal || [])
+            .slice(0, 12)
+            .map(
+              (j) =>
+                `<li><span>${esc(j.event)} · ${esc(j.target_id)}</span><span>${esc(j.at || "")}</span></li>`
+            )
+            .join("") || "<li><span>Пусто</span><span></span></li>"
+        }</ul>
+      </details>`;
   }
 
   function viewAccounts(s) {
     const bals = s.balances || {};
     const meta = s.balances_meta || {};
-    const today = new Date().toISOString().slice(0, 10);
-    return `
-      <section class="cap-wide">
-        <div>
-          <p class="section-label">Счета</p>
-          <ul class="soft-list">${(s.accounts || [])
-            .map((a) => {
-              const m = meta[a.id] || {};
-              const bal = bals[a.id];
-              const label = m.known === false || bal == null ? "остаток неизвестен" : fmt(bal, a.currency);
-              return `<li><span>${esc(a.name)} · ${esc(a.account_kind)} · ${esc(a.currency)}</span><span>${esc(label)}</span></li>`;
-            })
-            .join("")}</ul>
-          <form id="formAcc" class="cap-form" style="margin-top:16px">
-            <input name="name" required placeholder="Новый счёт" />
-            <select name="account_kind">
-              <option value="checking">расчётный</option>
-              <option value="savings">накопительный</option>
-              <option value="deposit">депозит</option>
-              <option value="cash">наличные</option>
-              <option value="broker">брокер</option>
-              <option value="other">другое</option>
-            </select>
-            <select name="currency"><option>RUB</option><option>USD</option><option>EUR</option></select>
-            <input name="amount" placeholder="Остаток (пусто = неизвестен)" />
-            <button type="submit" class="btn-primary">Создать</button>
-          </form>
-          <p class="section-label" style="margin-top:20px">Сверка с банком</p>
-          <form id="formStmt" class="cap-form">
-            <select name="account_id" required><option value="">счёт…</option>${(s.accounts || [])
-              .map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`)
-              .join("")}</select>
-            <input type="date" name="date" value="${today}" />
-            <input name="amount" required placeholder="Факт. остаток" />
-            <button type="submit" class="btn-primary">Записать сверку</button>
-          </form>
+    const today = isoLocal(new Date());
+    const accounts = (s.accounts || []).filter((a) => !a.archived);
+    const kindLabel = {
+      checking: "Кошелёк",
+      savings: "Вклады",
+      deposit: "Вклады",
+      cash: "Наличные",
+      broker: "Брокер",
+      other: "Другое",
+    };
+    const groups = [
+      ["checking", "Кошелёк"],
+      ["savings", "Вклады и накопления"],
+      ["cash", "Наличные"],
+      ["broker", "Брокерские счета"],
+      ["other", "Прочее"],
+    ];
+    const byKind = {};
+    accounts.forEach((a) => {
+      let k = a.account_kind || "other";
+      if (k === "deposit") k = "savings";
+      if (!byKind[k]) byKind[k] = [];
+      byKind[k].push(a);
+    });
+    const knownTotal = accounts.reduce((sum, a) => {
+      const m = meta[a.id] || {};
+      const bal = bals[a.id];
+      if (m.known === false || bal == null) return sum;
+      return sum + Number(bal);
+    }, 0);
+    const assetTotal = (s.assets || []).reduce((sum, a) => sum + (a.value_minor || 0), 0);
+
+    function accountRow(a) {
+      const m = meta[a.id] || {};
+      const bal = bals[a.id];
+      const known = !(m.known === false || bal == null);
+      const share = known && knownTotal > 0 ? Math.round((Number(bal) / knownTotal) * 100) : 0;
+      const rate =
+        a.rate_apr_percent != null ? ` · ${esc(a.rate_apr_percent)}%` : "";
+      return `<button type="button" class="cap-asset-row" data-acc-drill="${esc(a.id)}">
+        <div class="cap-asset-main">
+          <p class="cap-asset-name">${esc(a.name)}</p>
+          <p class="cap-asset-meta">${esc(kindLabel[a.account_kind] || a.account_kind)} · ${esc(
+            a.currency || "RUB"
+          )}${rate}</p>
+          <div class="cap-asset-bar" aria-hidden="true"><span style="width:${share}%"></span></div>
         </div>
+        <div class="cap-asset-side">
+          <p class="cap-num ${known ? "is-life" : ""}">${esc(
+            known ? fmt(bal, a.currency) : "неизвестен"
+          )}</p>
+          <p class="cap-sub">${known ? share + "% ликвидности" : "задай сверку"}</p>
+        </div>
+      </button>`;
+    }
+
+    return `
+      <section class="cap-hero cap-hero-compact">
         <div>
-          <p class="section-label">Активы (оценка)</p>
-          <ul class="soft-list">${(s.assets || [])
-            .map(
-              (a) =>
-                `<li><span>${esc(a.name)} · ${esc(a.asset_kind)} · ${esc(a.status)}</span><span>${esc(
-                  fmt(a.value_minor, a.currency)
-                )}</span></li>`
-            )
-            .join("") || "<li><span>Пока нет активов в ledger</span><span></span></li>"}</ul>
-          <form id="formAst" class="cap-form" style="margin-top:16px">
-            <input name="name" required placeholder="Актив" />
-            <select name="asset_kind">
-              <option value="real_estate">недвижимость</option>
-              <option value="broker_portfolio">брокерский портфель</option>
-              <option value="other">другое</option>
-            </select>
-            <input name="value_minor_major" placeholder="Оценка 0.00" />
-            <select name="status"><option value="estimated">оценка</option><option value="actual">факт</option></select>
-            <button type="submit" class="btn-primary">Сохранить актив</button>
-          </form>
-          <p class="section-label" style="margin-top:20px">Курс валюты (ручной)</p>
-          <form id="formFx" class="cap-form">
-            <select name="from_currency"><option>USD</option><option>EUR</option></select>
-            <span>→ RUB</span>
-            <input name="rate" required placeholder="курс" />
-            <input type="date" name="date" value="${today}" />
-            <button type="submit" class="btn-primary">Сохранить курс</button>
-          </form>
-          <ul class="soft-list" style="margin-top:10px">${(s.fx_rates || [])
-            .map(
-              (r) =>
-                `<li><span>${esc(r.from_currency)}/${esc(r.to_currency)} · ${esc(r.date)}</span><span>${esc(
-                  r.rate
-                )}</span></li>`
-            )
-            .join("") || "<li><span>Курсов нет — мультивалюта не суммируется</span><span></span></li>"}</ul>
+          <p class="cap-hero-kicker">Баланс</p>
+          <h2 class="cap-hero-title">Счета и активы</h2>
+          <p class="cap-hero-lead">Нажми на счёт — список операций за период. Формы спрятаны ниже.</p>
+        </div>
+        <div class="cap-hero-stats">
+          <div class="cap-hero-stat is-positive">
+            <p class="section-label">Известная ликвидность</p>
+            <p class="cap-num">${esc(fmt(knownTotal))}</p>
+          </div>
+          <div class="cap-hero-stat">
+            <p class="section-label">Активы</p>
+            <p class="cap-num">${esc(fmt(assetTotal))}</p>
+          </div>
+        </div>
+      </section>
+      <section class="cap-asset-board">
+        ${groups
+          .map(([k, title]) => {
+            const rows = (byKind[k] || []).slice().sort((a, b) => {
+              const ba = bals[a.id] == null ? -1 : Number(bals[a.id]);
+              const bb = bals[b.id] == null ? -1 : Number(bals[b.id]);
+              return bb - ba;
+            });
+            if (!rows.length) return "";
+            const sub = rows.reduce((sum, a) => {
+              const bal = bals[a.id];
+              const m = meta[a.id] || {};
+              if (m.known === false || bal == null) return sum;
+              return sum + Number(bal);
+            }, 0);
+            return `<div class="cap-asset-group">
+              <div class="cap-sec-head">
+                <p class="section-label">${esc(title)}</p>
+                <p class="cap-sub">${esc(fmt(sub))}</p>
+              </div>
+              <div class="cap-asset-list">${rows.map(accountRow).join("")}</div>
+            </div>`;
+          })
+          .join("")}
+        <div class="cap-asset-group">
+          <div class="cap-sec-head">
+            <p class="section-label">Инвестиции и активы</p>
+            <p class="cap-sub">${esc(fmt(assetTotal))}</p>
+          </div>
+          <div class="cap-asset-list">
+            ${
+              (s.assets || [])
+                .map((a) => {
+                  const kindRu =
+                    {
+                      real_estate: "Недвижимость",
+                      broker_portfolio: "Портфель",
+                      other: "Другое",
+                    }[a.asset_kind] || a.asset_kind;
+                  const stRu = a.status === "actual" ? "факт" : a.status === "estimated" ? "оценка" : a.status;
+                  return `<div class="cap-asset-row is-static">
+                    <div class="cap-asset-main">
+                      <p class="cap-asset-name">${esc(a.name)}</p>
+                      <p class="cap-asset-meta">${esc(kindRu)} · ${esc(stRu)}</p>
+                    </div>
+                    <div class="cap-asset-side">
+                      <p class="cap-num is-life">${esc(fmt(a.value_minor, a.currency))}</p>
+                    </div>
+                  </div>`;
+                })
+                .join("") ||
+              `<p class="cap-sub">Пока нет активов в ledger</p>`
+            }
+          </div>
         </div>
       </section>
       <section class="cap-charts">
@@ -749,7 +1018,69 @@
           <p class="section-label">Структура известных остатков</p>
           <canvas id="chartAssets" height="160"></canvas>
         </div>
-      </section>`;
+      </section>
+      <details class="cap-inline-details">
+        <summary>Добавить счёт / сверка / актив / курс</summary>
+        <div class="cap-wide" style="margin-top:14px">
+          <div>
+            <form id="formAcc" class="cap-form">
+              <input name="name" required placeholder="Новый счёт" />
+              <select name="account_kind">
+                <option value="checking">расчётный</option>
+                <option value="savings">накопительный</option>
+                <option value="deposit">депозит</option>
+                <option value="cash">наличные</option>
+                <option value="broker">брокер</option>
+                <option value="other">другое</option>
+              </select>
+              <select name="currency"><option>RUB</option><option>USD</option><option>EUR</option></select>
+              <input name="amount" placeholder="Остаток (пусто = неизвестен)" />
+              <button type="submit" class="btn-primary">Создать</button>
+            </form>
+            <p class="section-label" style="margin-top:16px">Сверка с банком</p>
+            <form id="formStmt" class="cap-form">
+              <select name="account_id" required><option value="">счёт…</option>${accounts
+                .map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`)
+                .join("")}</select>
+              <input type="date" name="date" value="${today}" />
+              <input name="amount" required placeholder="Факт. остаток" />
+              <button type="submit" class="btn-primary">Записать сверку</button>
+            </form>
+          </div>
+          <div>
+            <form id="formAst" class="cap-form">
+              <input name="name" required placeholder="Актив" />
+              <select name="asset_kind">
+                <option value="real_estate">недвижимость</option>
+                <option value="broker_portfolio">брокерский портфель</option>
+                <option value="other">другое</option>
+              </select>
+              <input name="value_minor_major" placeholder="Оценка 0.00" />
+              <select name="status"><option value="estimated">оценка</option><option value="actual">факт</option></select>
+              <button type="submit" class="btn-primary">Сохранить актив</button>
+            </form>
+            <p class="section-label" style="margin-top:16px">Курс валюты</p>
+            <form id="formFx" class="cap-form">
+              <select name="from_currency"><option>USD</option><option>EUR</option></select>
+              <span>→ RUB</span>
+              <input name="rate" required placeholder="курс" />
+              <input type="date" name="date" value="${today}" />
+              <button type="submit" class="btn-primary">Сохранить курс</button>
+            </form>
+            <ul class="soft-list" style="margin-top:10px">${
+              (s.fx_rates || [])
+                .map(
+                  (r) =>
+                    `<li><span>${esc(r.from_currency)}/${esc(r.to_currency)} · ${esc(
+                      r.date
+                    )}</span><span>${esc(r.rate)}</span></li>`
+                )
+                .join("") ||
+              "<li><span>Курсов нет — мультивалюта не суммируется</span><span></span></li>"
+            }</ul>
+          </div>
+        </div>
+      </details>`;
   }
 
   function viewBudget(s) {
@@ -984,18 +1315,31 @@
     const type = document.getElementById("fltType")?.value || "";
     const status = document.getElementById("fltStatus")?.value || "";
     const acc = document.getElementById("fltAcc")?.value || "";
-    state.filters = { q, type, status, account: acc };
+    const cat = document.getElementById("fltCat")?.value || "";
+    state.filters = { q, type, status, account: acc, category: cat };
     document.querySelectorAll("#capTable tbody tr").forEach((tr) => {
       const ok =
         (!q || (tr.getAttribute("data-q") || "").toLowerCase().includes(q)) &&
         (!type || tr.getAttribute("data-type") === type) &&
         (!status || tr.getAttribute("data-status") === status) &&
-        (!acc || tr.getAttribute("data-acc") === acc);
+        (!acc || tr.getAttribute("data-acc") === acc) &&
+        (!cat || tr.getAttribute("data-cat") === cat);
       tr.style.display = ok ? "" : "none";
     });
   }
 
   function bindOps(s) {
+    ["capSearch", "fltType", "fltStatus", "fltAcc", "fltCat"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.oninput = applyFilters;
+      el.onchange = applyFilters;
+    });
+    document.getElementById("capFltClear")?.addEventListener("click", () => {
+      state.filters = { q: "", type: "", status: "", account: "", category: "" };
+      paintBody();
+    });
+    applyFilters();
     const form = document.getElementById("formTx");
     if (form) {
       form.onsubmit = async (e) => {
@@ -1161,7 +1505,22 @@
     });
   }
 
-  function bindAccounts() {
+  function bindAccounts(s) {
+    document.querySelectorAll("[data-acc-drill]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.getAttribute("data-acc-drill");
+        const acc = (s.accounts || []).find((a) => a.id === id);
+        const ops = (s.transactions || []).filter(
+          (t) => t.account_id === id && t.status !== "void"
+        );
+        openOpDrawer({
+          title: acc?.name || "Счёт",
+          subtitle: `${state.from} → ${state.to}`,
+          ops,
+          openFilters: { account: id, status: "actual" },
+        });
+      };
+    });
     const formAcc = document.getElementById("formAcc");
     if (formAcc) {
       formAcc.onsubmit = async (e) => {
@@ -1417,18 +1776,38 @@
   function bindOverviewExtras(s) {
     const bank = s.bank_turnover || {};
     const economic = s.economic || {};
+    document.querySelectorAll("[data-goto]").forEach((el) => {
+      el.onclick = () => setTab(el.getAttribute("data-goto"));
+    });
     document.querySelectorAll("[data-drill]").forEach((el) => {
-      el.onclick = () => {
+      const open = () => {
         const kind = el.getAttribute("data-drill");
         const ops = kind === "bank_in" ? bank.operations_in : bank.operations_out;
-        showOpDrill(ops, kind === "bank_in" ? "Поступления" : "Списания");
+        openOpDrawer({
+          title: kind === "bank_in" ? "Поступления" : "Списания",
+          subtitle: `${state.from} → ${state.to}`,
+          ops,
+          openFilters: { type: kind === "bank_in" ? "income" : "expense", status: "actual" },
+        });
+      };
+      el.onclick = open;
+      el.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
       };
     });
     document.querySelectorAll("[data-econ]").forEach((el) => {
       el.onclick = () => {
         const id = el.getAttribute("data-econ");
         const b = (economic.buckets || []).find((x) => x.id === id);
-        if (b) showOpDrill(b.operations, b.label);
+        if (b)
+          openOpDrawer({
+            title: b.label,
+            subtitle: "экономическая классификация",
+            ops: b.operations,
+          });
       };
     });
     const review = s.needs_review || [];
@@ -1639,35 +2018,21 @@
   }
 
   function showDrill(seg) {
-    const host = document.getElementById("capExpDrill");
-    if (!host || !seg) return;
-    host.classList.remove("is-hidden");
-    host.innerHTML = `
-      <p class="section-label">${esc(seg.name)} · ${esc(fmt(seg.amount_minor))}</p>
-      <ul class="soft-list">${(seg.operations || [])
-        .slice(0, 20)
-        .map(
-          (o) =>
-            `<li><span>${esc(o.date)} · ${esc(o.merchant)}</span><span>${esc(fmt(o.amount_minor))}</span></li>`
-        )
-        .join("")}</ul>`;
+    if (!seg) return;
+    openOpDrawer({
+      title: seg.name,
+      subtitle: `${fmt(seg.amount_minor)} · ${(((seg.share || 0) * 100).toFixed(1))}% расходов`,
+      ops: seg.operations || [],
+      openFilters: {
+        category: seg.category_id && seg.category_id !== "uncategorized" ? seg.category_id : "",
+        type: "expense",
+        status: "actual",
+      },
+    });
   }
 
   function showOpDrill(ops, title) {
-    const host = document.getElementById("capEconDrill") || document.getElementById("capExpDrill");
-    if (!host) return;
-    host.classList.remove("is-hidden");
-    host.innerHTML = `
-      <p class="section-label">${esc(title)}</p>
-      <ul class="soft-list">${(ops || [])
-        .slice(0, 40)
-        .map(
-          (o) =>
-            `<li><span>${esc(o.date)} · ${esc(o.merchant || o.economic_kind || "")}</span><span>${esc(
-              fmt(o.amount_minor)
-            )}</span></li>`
-        )
-        .join("") || "<li><span>Пусто</span><span></span></li>"}</ul>`;
+    openOpDrawer({ title, ops: ops || [] });
   }
 
   function renderAssetChart(s) {

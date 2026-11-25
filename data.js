@@ -1,59 +1,264 @@
-﻿window.LH_DATA = {
+window.LH_DATA = {
   "meta": {
-    "version": "0.4.1-demo",
+    "version": "0.4.2-demo",
     "asOf": "2026-11-25",
     "generated_at": "2026-11-25T00:00:00Z",
     "product": "Personal Command Center",
     "snapshot": true,
-    "demo": true,
-    "presentation_note": "Публичное демо без персональных финансовых сумм."
+    "ui_version": "0.4",
+    "interpreted_at": "2026-11-25",
+    "interpreter": "demo fixture",
+    "presentation_note": "Синтетика. Утро только из этого overlay. Пустая точка остаётся пустой.",
+    "demo": true
   },
   "profile": {
     "name": "Demo User",
-    "role": "Builder of personal systems",
-    "stage": "Shipping a Life OS",
-    "focus": "Use Harvest every day",
-    "values": ["Clarity", "Agency", "Care"],
-    "motto": "When I am not worrying about anything"
+    "role": "fixture role, not a biography",
+    "stage": "Synthetic morning",
+    "focus": "Use the synthetic demo, not a personal card.",
+    "values": [
+      "clarity",
+      "agency",
+      "care"
+    ],
+    "motto": null,
+    "_fields": {
+      "name": {
+        "value": "Demo User",
+        "mode": "literal",
+        "source": "[[Demo User]]"
+      },
+      "role": {
+        "value": "fixture role, not a biography",
+        "mode": "literal",
+        "source": "[[Demo User]]"
+      },
+      "stage": {
+        "value": "Synthetic morning",
+        "mode": "interpreted",
+        "source": "demo overlay"
+      },
+      "focus": {
+        "value": "Use the synthetic demo, not a personal card.",
+        "mode": "interpreted",
+        "source": "demo overlay"
+      }
+    }
   },
-  "state": { "mood": null, "energy": null, "focus": null, "wave": null, "journal": null },
+  "state": {
+    "mood": null,
+    "energy": null,
+    "focus": null,
+    "wave": null,
+    "journal": null
+  },
   "universe": [
-    { "id": "family", "label": "Family", "angle": -90, "status": "active", "blurb": "Demo node.", "mode": "literal" },
-    { "id": "finance", "label": "Finance", "angle": -30, "status": "empty", "blurb": "No demo balances.", "mode": "literal" },
-    { "id": "health", "label": "Health", "angle": 20, "status": "empty", "blurb": "No demo slice.", "mode": "literal" },
-    { "id": "projects", "label": "Projects", "angle": 70, "status": "active", "blurb": "Live Harvest demo.", "mode": "literal" },
-    { "id": "work", "label": "Work", "angle": 125, "status": "active", "blurb": "Demo employment.", "mode": "literal" },
-    { "id": "learn", "label": "Learn", "angle": 175, "status": "active", "blurb": "Demo learning.", "mode": "literal" },
-    { "id": "rest", "label": "Rest", "angle": 220, "status": "empty", "blurb": "No demo slice.", "mode": "literal" }
+    {
+      "id": "family",
+      "label": "Семья",
+      "angle": -90,
+      "status": "empty",
+      "blurb": null
+    },
+    {
+      "id": "finance",
+      "label": "Финансы",
+      "angle": -30,
+      "status": "active",
+      "blurb": "Placeholder goal. No balances in this fixture.",
+      "mode": "literal",
+      "source": "[[Финансовая независимость и капитал]]"
+    },
+    {
+      "id": "health",
+      "label": "Здоровье",
+      "angle": 20,
+      "status": "empty",
+      "blurb": null
+    },
+    {
+      "id": "projects",
+      "label": "Проекты",
+      "angle": 70,
+      "status": "empty",
+      "blurb": null
+    },
+    {
+      "id": "work",
+      "label": "Работа",
+      "angle": 125,
+      "status": "empty",
+      "blurb": null
+    },
+    {
+      "id": "learn",
+      "label": "Обучение",
+      "angle": 175,
+      "status": "empty",
+      "blurb": null
+    },
+    {
+      "id": "rest",
+      "label": "Отдых",
+      "angle": 220,
+      "status": "active",
+      "blurb": "Demo rest: walking, not a biography.",
+      "mode": "literal",
+      "source": "[[Интересы и отдых]]"
+    }
   ],
   "mainQuest": {
     "title": "Financial independence (demo)",
-    "detail": "Placeholder goal — not a real balance sheet.",
-    "checkpoint": "Confirm local Capital ledger"
+    "detail": null,
+    "checkpoint": null,
+    "_fields": {
+      "title": {
+        "value": "Financial independence (demo)",
+        "mode": "literal",
+        "source": "[[Финансовая независимость и капитал]]"
+      }
+    }
   },
   "sideQuests": [
-    { "title": "Run capital_api locally", "meta": "127.0.0.1:8777" },
-    { "title": "Add first confirmed account", "meta": "actual only" }
+    {
+      "title": "Read the demo fixture",
+      "meta": "explicit overlay step",
+      "mode": "interpreted",
+      "source": "demo overlay"
+    }
   ],
-  "waves": ["Live Harvest", "Local-first"],
+  "waves": [
+    "Demo rest: walking, not a biography."
+  ],
   "razvivator": {
     "demo": true,
-    "type": "note",
-    "text": "This public build uses synthetic data. Real Capital data stays off GitHub."
+    "type": "вопрос",
+    "text": "This question is an explicit demo overlay field.",
+    "mode": "interpreted",
+    "source": "demo overlay"
   },
-  "progress": { "achievements": [], "measurable": [] },
-  "recent": [{ "what": "Capital module MVP", "kind": "product" }],
+  "progress": {
+    "achievements": [],
+    "measurable": []
+  },
+  "recent": [],
   "portrait": {
-    "core": { "title": "Core", "lead": "Demo character sheet.", "mode": "interpreted" },
+    "core": {
+      "title": "Ядро",
+      "lead": "Synthetic core for the public demo. Not a person.",
+      "mode": "literal",
+      "source": "[[Demo User]]"
+    },
     "clusters": [
       {
         "id": "values",
-        "title": "Values",
+        "title": "Ценности и принципы",
         "mode": "literal",
-        "items": [{ "ep": "fact", "text": "Clarity and agency (demo)" }]
+        "source": "[[Ценности и понимание свободы]]",
+        "items": [
+          {
+            "ep": "fact",
+            "text": "Ключевые ценности: clarity, agency, care."
+          }
+        ]
+      },
+      {
+        "id": "drive",
+        "title": "Мотивация",
+        "mode": "literal",
+        "source": "[[Demo User]]",
+        "items": [
+          {
+            "ep": "intent",
+            "text": "Keep this demo local and obviously synthetic."
+          }
+        ]
+      },
+      {
+        "id": "mind",
+        "title": "Мышление",
+        "mode": "literal",
+        "source": "[[Принятие решений и отношение к ошибкам]]",
+        "items": [
+          {
+            "ep": "fact",
+            "text": "Demo decision line lives only in this fixture."
+          },
+          {
+            "ep": "hypo",
+            "text": "Demo hypothesis lives only in this fixture card."
+          }
+        ]
+      },
+      {
+        "id": "craft",
+        "title": "Компетенции",
+        "mode": null,
+        "source": null,
+        "items": []
+      },
+      {
+        "id": "spark",
+        "title": "Интересы",
+        "mode": "literal",
+        "source": "[[Интересы и отдых]]",
+        "items": [
+          {
+            "ep": "fact",
+            "text": "Demo rest: walking, not a biography."
+          }
+        ]
+      },
+      {
+        "id": "edge",
+        "title": "Сильные стороны",
+        "mode": null,
+        "source": null,
+        "items": []
+      },
+      {
+        "id": "grow",
+        "title": "Зоны развития",
+        "mode": null,
+        "source": null,
+        "items": []
+      },
+      {
+        "id": "tension",
+        "title": "Внутренние напряжения",
+        "mode": null,
+        "source": null,
+        "items": []
+      },
+      {
+        "id": "future",
+        "title": "Желаемый образ",
+        "mode": null,
+        "source": null,
+        "items": []
       }
     ],
-    "history": [{ "when": "2026-11-25", "text": "Demo snapshot" }]
+    "history": []
+  },
+  "research": {
+    "provenance": "synthetic-demo",
+    "synthetic": true,
+    "portrait_updated": false,
+    "auto_send": false,
+    "packet_prompt": "demo/research-packet.prompt.txt",
+    "source_fixture": "tools/fixtures/lh_research/hypothesis_card.md",
+    "includes": [
+      "цель гипотезы",
+      "известный пункт",
+      "гипотеза и открытый вопрос",
+      "правила интервью"
+    ],
+    "excludes": [
+      "секреты",
+      "суммы",
+      "тела связанных карточек",
+      "ledger",
+      "портрет"
+    ]
   }
 };
-

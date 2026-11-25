@@ -1,0 +1,51 @@
+# snapshot-sources/1
+
+# Необязательный манифест для tools/lh_ui_snapshot.py.
+# Если файла нет, скрипт использует встроенный список чтения и портрет не меняется.
+# Поле rendered повторяет файлы, которые build_literal читает. Пустая секция
+# остаётся null / []. Новый путь здесь не создаёт текст: он попадает в
+# meta.sources.not_in_snapshot. Ledger в снимок не входит.
+
+version: 1
+contract: snapshot-sources/1
+rendered:
+  - path: Личность/Сергей.md
+    slot: profile
+  - path: Личность/Ценности и понимание свободы.md
+    slot: profile.values
+  - path: Личность/Работа — тимлид 1С УХ.md
+    slot: universe.work
+  - path: Личность/Профессиональный профиль и карьерная мотивация.md
+    slot: universe.learn
+  - path: Цели/Финансовая независимость и капитал.md
+    slot: mainQuest
+  - path: Личность/Интересы и отдых.md
+    slot: universe.rest
+  - path: Личность/Принятие решений и отношение к ошибкам.md
+    slot: portrait.mind
+  - path: Связи/Семья.md
+    slot: universe.family
+  - path: Личность/Здоровье привычки и эмоциональное состояние.md
+    slot: universe.health
+  - path: Личность/Созидание деньги и управление.md
+    slot: portrait.create
+  - path: Проекты/Live Harvest.md
+    slot: universe.projects
+  - path: Заметки/Гипотезы для проверки при самопознании.md
+    slot: portrait.tension
+  - path: Цели/Образ желаемой жизни.md
+    slot: portrait.future
+extra_unrendered:
+  - path: Мозг/_system/External Research Protocol.md
+    reason: "Системный протокол. Портретный сборщик его не рисует."
+  - path: Мозг/_system/Targeted Harvest.md
+    reason: "Системный протокол. Портретный сборщик его не рисует."
+  - path: Цели/Аренда в Москве — переезд с дочерью.md
+    reason: "Контрольная точка задаётся только overlay. Сборщик файл не читает."
+  - path: Личность/Волны вдохновения и фокус.md
+    reason: "Сборщик не читает. Отдых берётся из карточки интересов, если там есть факт."
+  - path: Финансы/Кеш — текущий.md
+    reason: "Сборщик не читает. Блип финансов — первый факт карточки цели, иначе null."
+excluded:
+  - path: Финансы/Капитал/
+    reason: "Ledger не входит в семантический снимок. Количественный экран живёт от Capital API."

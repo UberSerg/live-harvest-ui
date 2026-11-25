@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "interpreted_at": "2026-11-25",
+    "interpreter": "demo fixture",
+    "note": "Синтетика. Утро только из этого overlay. Пустая точка остаётся пустой."
+  },
+  "profile": {
+    "stage": {
+      "value": "Synthetic morning",
+      "mode": "interpreted",
+      "source": "demo overlay"
+    },
+    "focus": {
+      "value": "Use the synthetic demo, not a personal card.",
+      "mode": "interpreted",
+      "source": "demo overlay"
+    }
+  },
+  "sideQuests": [
+    {
+      "title": "Read the demo fixture",
+      "meta": "explicit overlay step",
+      "mode": "interpreted",
+      "source": "demo overlay"
+    }
+  ],
+  "razvivator": {
+    "demo": true,
+    "type": "вопрос",
+    "text": "This question is an explicit demo overlay field.",
+    "mode": "interpreted",
+    "source": "demo overlay"
+  }
+}

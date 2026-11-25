@@ -4,6 +4,12 @@ Desktop.ini
 *.log
 .env
 *.pem
-# never commit real statements
+# never commit real statements / private vault dumps
 *_statement_real*
 *выписка*
+harvest/Финансы/Капитал/
+**/cap-*.yaml
+**/ingest-index.json
+__pycache__/
+*.pyc
+.pytest_cache/

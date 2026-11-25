@@ -1,30 +1,35 @@
 # Live Harvest UI
 
-Personal Command Center (static, read-only). Version **0.4**.
+Personal cognitive interface (static). Public tree = **synthetic demo only**.
 
 ## Quick start
 
 ```bash
-cd harvest-ui
-python -m http.server 8765
+python -m http.server 8771
 ```
 
-http://localhost:8765/
+- App: http://127.0.0.1:8771/
+- Demo snapshot: http://127.0.0.1:8771/?demo=1
 
-## v0.4.1
+## BRAIN EVOLUTION 01 (public)
 
-- Editorial layout + live snapshot из `harvest/`
-- Literal (скрипт) + interpreted (`overlay.json`) — см. `PRESENTATION.md`
-- После харвеста: `python tools/lh_ui_snapshot.py` → UI poll / «Обновить снимок»
-- Три экрана: Обзор · Личность · Моя вселенная
+IA: **Первый кадр** — Сегодня · Мозг (линзы) · Вселенная · Капитал.
+
+Evaluation brief for external review: [`docs/BRAIN-EVO-01-FOR-CHATGPT.md`](docs/BRAIN-EVO-01-FOR-CHATGPT.md)  
+Constitution draft: [`docs/BRAIN_CONSTITUTION.md`](docs/BRAIN_CONSTITUTION.md)  
+UI design decision: [`design/BRAIN-UI-EVOLUTION-01.md`](design/BRAIN-UI-EVOLUTION-01.md)  
+Harness: [`design/HARNESS.md`](design/HARNESS.md)
+
+Brain CLIs (synthetic fixtures under `tools/fixtures/`): retrieve, consolidate, ingest, research packet, contest, decisions, experiments, finance_reflect (status class only — no amounts).
 
 ## Layout
 
-- `index.html` / `styles.css` / `app.js` / `data.js`
-- `design/HARNESS.md` — канон v0.4
-- `archive/v0.1` … `v0.3` — предыдущие версии
-- `review/` — скриншоты и review notes
+- `index.html` / `styles.css` / `app.js` / `capital.js` / `data.js`
+- `demo/` — synthetic snapshot + research packet
+- `tools/` — Capital + brain helpers (no private ledger)
+- `archive/` — older UI versions
+- `review/` — reviews (no real statements)
 
 ## Boundaries
 
-Read-only. SoT = `harvest/`. Демо маркируется. Персональные KPI не выдумываются.
+Private `harvest/` and Capital ledger stay local. This repo must not contain real balances, statements, or diary text.
