@@ -215,7 +215,8 @@
   function viewOverview(s) {
     const nw = s.net_worth || {};
     const flows = s.flows || {};
-    const planned = s.planned_combined || s.recurring_monthly || {};
+    const monthlyPlan = s.recurring_monthly || {};
+    const periodPlan = s.planned_combined || {};
     const budget = s.budget || {};
     const fi = s.fi || {};
     const incomplete = [];
@@ -225,8 +226,8 @@
       incomplete.push("не заполнены: " + budget.unfilled_budget_lines.join(", "));
     const debtIcon = `<span class="cap-debt-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z"/><path d="M9.5 12.5l1.8 1.8 3.7-3.8"/></svg></span>`;
     const savRatio =
-      planned.income_minor > 0 && budget.savings_plan_minor != null
-        ? Math.round((budget.savings_plan_minor / planned.income_minor) * 100)
+      monthlyPlan.income_minor > 0 && budget.savings_plan_minor != null
+        ? Math.round((budget.savings_plan_minor / monthlyPlan.income_minor) * 100)
         : null;
     return `
       <section class="cap-hero">
@@ -254,8 +255,8 @@
         </div>
         <div class="cap-kpi is-positive">
           <p class="section-label">План-поток / мес</p>
-          <p class="cap-num">${esc(fmt(planned.net_cashflow_minor))}</p>
-          <p class="cap-sub">без двойного учёта шаблонов</p>
+          <p class="cap-num">${esc(fmt(monthlyPlan.net_cashflow_minor))}</p>
+          <p class="cap-sub">шаблоны · период план ${esc(fmt(periodPlan.net_cashflow_minor))}</p>
         </div>
         <div class="cap-kpi">
           <p class="section-label">План накоплений</p>
